@@ -444,7 +444,7 @@ async function main(): Promise<void> {
       llm: {
         complete: async (tier: string, prompt: string, system?: string) => {
           const res = await llm.complete(tier, {
-            system,
+            system: system ?? '',
             messages: [{ role: 'user', content: prompt }],
             max_tokens: 1024,
           });
@@ -589,7 +589,7 @@ async function main(): Promise<void> {
     llm: {
       complete: async (tier: string, prompt: string, system?: string) => {
         const res = await llm.complete(tier, {
-          system,
+          system: system ?? '',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1024,
         });

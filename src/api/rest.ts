@@ -280,7 +280,7 @@ const WF3_TEMPLATES = [
 
 interface WorkflowStep {
   operation: string;
-  params: Record<string, string>;
+  params: Record<string, unknown>;
 }
 
 interface SkillToolExecutor {

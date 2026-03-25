@@ -358,14 +358,14 @@ export class AgentOrchestrator {
         search: (q: string) => self.deps.memory?.search(ns, q) ?? Promise.resolve([]),
       },
       channel: {
-        send: (nid: string, text: string) =>
+        send: (nid: string, text?: string) =>
           self.deps.channel?.send(nid, text) ?? Promise.resolve(),
       },
       canvas: { append: () => {}, clear: () => {} },
       llm: {
         complete: async (tier: string, prompt: string, system?: string) => {
           const res = await self.llm.complete(tier, {
-            system, messages: [{ role: 'user', content: prompt }], max_tokens: 1024,
+            system: system ?? '', messages: [{ role: 'user', content: prompt }], max_tokens: 1024,
           });
           return { text: res.text };
         },
