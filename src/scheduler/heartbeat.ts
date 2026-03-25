@@ -62,8 +62,8 @@ export class HeartbeatRunner {
     const instructions = this.readHeartbeatMd();
     const now          = new Date().toISOString();
 
-    // Use the personal agent for heartbeat context
-    const agent = this.agents.get('personal') ?? this.agents.getAll()[0];
+    // Use the default agent for heartbeat context
+    const agent = this.agents.get('default') ?? this.agents.getAll()[0];
     if (!agent) return 'HEARTBEAT_OK';
 
     const persona    = agent.persona?.trim() ?? 'You are AURA, a personal AI assistant.';
