@@ -71,7 +71,9 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Install coverage provider
-        run: npm install --no-save --legacy-peer-deps @vitest/coverage-v8
+        run: |
+          VITEST_VERSION=$(node -e "console.log(require('./node_modules/vitest/package.json').version)")
+          npm install --no-save --legacy-peer-deps @vitest/coverage-v8@${VITEST_VERSION}
 
       - name: Run tests
         run: npm test -- --reporter=verbose --coverage
