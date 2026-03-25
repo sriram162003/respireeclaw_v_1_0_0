@@ -15,8 +15,19 @@ jobs:
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      PUPPETEER_SKIP_DOWNLOAD: 1
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 make g++ \
+            libsqlite3-dev \
+            libavahi-compat-libdnssd-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -33,8 +44,19 @@ jobs:
   test:
     name: Tests
     runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      PUPPETEER_SKIP_DOWNLOAD: 1
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 make g++ \
+            libsqlite3-dev \
+            libavahi-compat-libdnssd-dev
 
       - uses: actions/setup-node@v4
         with:
