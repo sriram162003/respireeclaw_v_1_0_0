@@ -18,9 +18,18 @@ jobs:
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
       PUPPETEER_SKIP_DOWNLOAD: 1
-      npm_config_ignore_scripts: true   # skip native compilation — tsc doesn't need it
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 make g++ \
+            libsqlite3-dev \
+            libavahi-compat-libdnssd-dev \
+            libavahi-client-dev \
+            libavahi-common-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -60,6 +69,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Install coverage provider
+        run: npm install --no-save --legacy-peer-deps @vitest/coverage-v8
 
       - name: Run tests
         run: npm test -- --reporter=verbose --coverage
