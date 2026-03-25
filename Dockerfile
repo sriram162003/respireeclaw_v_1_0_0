@@ -1,5 +1,5 @@
 # RespireeClaw Gateway Dockerfile
-FROM node:20-slim
+FROM node:25-slim
 
 # Install system dependencies for native modules and browser automation
 RUN apt-get update && apt-get install -y --no-install-recommends \
