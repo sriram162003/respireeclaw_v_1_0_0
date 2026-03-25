@@ -51,7 +51,7 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/selenium-webdriver": "^4.1.27",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.14.0",
+    "@types/node": "^25.5.0",
     "@types/ws": "^8.5.12",
     "tsx": "^4.15.7",
     "typescript": "^5.5.0",
