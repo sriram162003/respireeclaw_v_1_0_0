@@ -1,0 +1,39 @@
+# RespireeClaw Gateway Development Docker Compose
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: respireeclaw-gateway-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # WebChat
+      - "3001:3001"  # Canvas
+      - "3002:3002"  # REST API
+      - "8765:8765"  # ANP
+    volumes:
+      # Persistent data
+      - aura-data:/root/.aura
+      # Bind mount for development (hot reload)
+      - .:/app
+      - /app/node_modules
+      # Environment file
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=development
+      - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+    command: npm run dev
+
+  # Optional: Local Ollama service for development
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama-dev
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+
+volumes:
+  aura-data:

@@ -1,0 +1,32 @@
+name: telegram_send
+version: 1.0.0
+description: >
+  Send Telegram messages to contacts by name or chat ID. Looks up names in
+  ~/.aura/workspace/contacts.md automatically. Also lists all saved contacts.
+executor: telegram_send.ts
+enabled: true
+source: human
+requires_env:
+  - TELEGRAM_BOT_TOKEN
+tools:
+  - name: send_telegram_message
+    description: >
+      Send a Telegram message to a contact by name (e.g. "Donna", "Lochan") or
+      by numeric chat_id. Names are resolved from ~/.aura/workspace/contacts.md.
+    parameters:
+      type: object
+      properties:
+        to:
+          type: string
+          description: Contact name (e.g. "Donna") or numeric Telegram chat_id
+        message:
+          type: string
+          description: The message text to send
+      required: [to, message]
+
+  - name: list_contacts
+    description: List all contacts saved in ~/.aura/workspace/contacts.md with their Telegram chat IDs.
+    parameters:
+      type: object
+      properties: {}
+      required: []

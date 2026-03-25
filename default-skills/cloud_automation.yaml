@@ -1,0 +1,327 @@
+name: cloud_automation
+version: 1.0.0
+description: >
+  AWS Cloud Automation Skill — Full AWS SDK v3 implementation. Supports EC2, RDS, Lambda, ECS, S3, 
+  and CloudWatch operations. Features include: start/stop/reboot/terminate EC2 instances, RDS database 
+  lifecycle management, Lambda function invocation and configuration, ECS/Fargate task management, 
+  S3 bucket/object operations, CloudWatch alarms management, parallel task execution, workflow state 
+  persistence with checkpoints/rollback, and conditional execution based on CloudWatch metrics.
+  Dashboard at localhost:3002/dashboard2. Use set_aws_credentials tool to configure AWS access.
+executor: cloud_automation.ts
+enabled: true
+source: self_written
+tools:
+  - name: execute_ec2_operation
+    description: Execute EC2 lifecycle operations (start, stop, restart, terminate) on specified instances with workflow tracking
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation to perform - start, stop, restart, or terminate
+        instance_ids:
+          type: array
+          description: Array of EC2 instance IDs to target
+          items:
+            type: string
+        region:
+          type: string
+          description: AWS region where instances are located
+        workflow_id:
+          type: string
+          description: Unique identifier for tracking this workflow execution
+      required: [operation, instance_ids, region, workflow_id]
+
+  - name: execute_rds_operation
+    description: Execute RDS database lifecycle operations (start, stop, reboot, describe) with workflow tracking
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation to perform - start, stop, reboot, or describe
+        identifier:
+          type: string
+          description: RDS instance or cluster identifier
+        region:
+          type: string
+          description: AWS region where the RDS instance is located
+        workflow_id:
+          type: string
+          description: Unique identifier for tracking this workflow execution
+      required: [operation, identifier, region, workflow_id]
+
+  - name: execute_lambda_operation
+    description: Execute AWS Lambda operations (invoke, list, get_config) with workflow tracking
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation to perform - invoke, list, or get_config
+        function_name:
+          type: string
+          description: Lambda function name
+        region:
+          type: string
+          description: AWS region where the Lambda function is located
+        payload:
+          type: object
+          description: JSON payload to send when invoking the function
+        workflow_id:
+          type: string
+          description: Unique identifier for tracking this workflow execution
+      required: [operation, function_name, region, workflow_id]
+
+  - name: execute_ecs_operation
+    description: >
+      Execute ECS/Fargate task operations (run_task, stop_task, describe, list_clusters, list_tasks)
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation - run_task, stop_task, describe, list_clusters, or list_tasks
+        cluster:
+          type: string
+          description: ECS cluster name
+        task_definition:
+          type: string
+          description: Task definition ARN (required for run_task)
+        task_arn:
+          type: string
+          description: Task ARN (required for stop_task, describe)
+        region:
+          type: string
+          description: AWS region where the ECS cluster is located
+        workflow_id:
+          type: string
+          description: Unique identifier for tracking this workflow execution
+        overrides:
+          type: object
+          description: Container overrides for task execution
+      required: [operation, cluster, region, workflow_id]
+
+  - name: execute_s3_operation
+    description: >
+      Execute S3 bucket and object operations (list_buckets, list_objects, get_object, put_object, delete_object)
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation - list_buckets, list_objects, get_object, put_object, or delete_object
+        bucket:
+          type: string
+          description: S3 bucket name (required for object operations)
+        key:
+          type: string
+          description: Object key (required for get_object, put_object, delete_object)
+        content:
+          type: string
+          description: File content to upload (required for put_object)
+        region:
+          type: string
+          description: AWS region (default us-east-1)
+        workflow_id:
+          type: string
+          description: Unique identifier for tracking this workflow execution
+      required:
+        - operation
+        - workflow_id
+
+  - name: manage_cloudwatch_alarms
+    description: >
+      Manage CloudWatch alarms (describe_alarms, set_state) for monitoring and remediation workflows
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation - describe_alarms or set_state
+        alarm_names:
+          type: array
+          description: Array of alarm names to describe
+          items:
+            type: string
+        alarm_name:
+          type: string
+          description: Alarm name for set_state operation
+        state_value:
+          type: string
+          description: Alarm state - OK, ALARM, or INSUFFICIENT_DATA (for set_state)
+        state_reason:
+          type: string
+          description: Reason for state change (for set_state)
+        region:
+          type: string
+          description: AWS region (default us-east-1)
+        workflow_id:
+          type: string
+          description: Unique identifier for tracking this workflow execution
+      required:
+        - operation
+        - workflow_id
+
+  - name: spawn_agent_team
+    description: >
+      Execute multiple AWS tasks in parallel using Promise.allSettled. Each task has a task_type and
+      region field. Supported task_types: describe_instances (list instance details), check_health
+      (DescribeInstanceStatus), start_instances, stop_instances, get_metrics (CloudWatch — requires
+      metric field, e.g. CPUUtilization), run_ssm_command (requires command field), scale_asg
+      (requires asg_name and desired_capacity). instance_ids array required for most types.
+    parameters:
+      type: object
+      properties:
+        tasks:
+          type: array
+          description: >
+            Array of task objects. Each must have task_type and region. Most need instance_ids.
+            scale_asg needs asg_name + desired_capacity. get_metrics needs metric name.
+            run_ssm_command needs command string.
+          items:
+            type: object
+        workflow_id:
+          type: string
+          description: Workflow ID for tracking and dashboard updates
+        concurrency_limit:
+          type: number
+          description: Max tasks to run in parallel (default 5)
+      required: [tasks, workflow_id]
+
+  - name: update_dashboard
+    description: Send workflow state updates to localhost:3002/dashboard2 for real-time visualization
+    parameters:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+          description: Workflow ID to update on dashboard
+        status:
+          type: string
+          description: Current status - pending, running, completed, failed, or rolled_back
+        data:
+          type: object
+          description: Additional workflow data to display on dashboard
+        timestamp:
+          type: string
+          description: ISO timestamp of the update
+      required: [workflow_id, status]
+
+  - name: process_webhook
+    description: Process incoming webhook triggers from external monitoring systems to initiate or modify workflows
+    parameters:
+      type: object
+      properties:
+        event_type:
+          type: string
+          description: Type of monitoring event received (e.g., high_cpu, instance_down, schedule_trigger)
+        payload:
+          type: object
+          description: Webhook payload containing instance details and trigger conditions
+        signature:
+          type: string
+          description: Webhook signature for validation (optional)
+      required: [event_type, payload]
+
+  - name: manage_workflow_state
+    description: Track and update workflow execution state with support for checkpoints, rollback markers, and history
+    parameters:
+      type: object
+      properties:
+        action:
+          type: string
+          description: State action - get, set, checkpoint, or rollback
+        workflow_id:
+          type: string
+          description: Workflow ID to manage
+        state_data:
+          type: object
+          description: State data to store when action is set or checkpoint
+        step:
+          type: string
+          description: Current workflow step identifier for checkpointing
+      required: [action, workflow_id]
+
+  - name: evaluate_conditions
+    description: Evaluate conditional branching based on EC2 instance states and CloudWatch metrics to determine workflow execution path
+    parameters:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: EC2 instance ID to evaluate
+        conditions:
+          type: array
+          description: Array of condition objects with metric, operator, and threshold
+          items:
+            type: object
+        region:
+          type: string
+          description: AWS region for CloudWatch metrics
+      required: [instance_id, conditions, region]
+
+  - name: set_aws_credentials
+    description: Save AWS credentials to a config file so AWS operations can authenticate. Credentials are stored securely in ~/.aura/config/aws-credentials.json
+    parameters:
+      type: object
+      properties:
+        access_key_id:
+          type: string
+          description: AWS Access Key ID (e.g., AKIAW2...)
+        secret_access_key:
+          type: string
+          description: AWS Secret Access Key
+        region:
+          type: string
+          description: Default AWS region (e.g., us-east-1, ap-southeast-1)
+        session_token:
+          type: string
+          description: Optional AWS Session Token for temporary credentials
+      required: [access_key_id, secret_access_key, region]
+
+  - name: get_aws_credentials_status
+    description: Check if AWS credentials have been configured and are ready for AWS operations
+    parameters:
+      type: object
+      properties: {}
+
+  - name: resolve_resource_names
+    description: Look up EC2 instances by their Name tag and return instance IDs, states, and types
+    parameters:
+      type: object
+      properties:
+        names:
+          type: array
+          description: Array of Name tag values to search for
+          items:
+            type: string
+        region:
+          type: string
+          description: AWS region to search in
+        resource_type:
+          type: string
+          description: Resource type to resolve (default 'ec2')
+      required: [names, region]
+
+  - name: get_audit_log
+    description: Query the cloud operations audit log for historical operation records
+    parameters:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+          description: Filter by workflow ID
+        service:
+          type: string
+          description: Filter by AWS service (ec2, rds, lambda, ecs, s3, cloudwatch)
+        status:
+          type: string
+          description: Filter by status (success or failed)
+        since_hours:
+          type: number
+          description: Only return entries from the last N hours
+        limit:
+          type: number
+          description: Maximum number of entries to return (default 100)
+      required: []

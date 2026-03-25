@@ -1,0 +1,108 @@
+name: wazuh_siem
+version: 1.0.0
+description: >
+  Wazuh 4.x SIEM integration. Supports two alert intake paths: (1) webhook push —
+  Wazuh custom integration POSTs raw alert JSON to /webhook/wazuh-alerts and the agent
+  calls wazuh_receive_alert to triage and store it; (2) on-demand polling via
+  wazuh_fetch_alerts which authenticates with the Wazuh Manager REST API (port 55000)
+  using JWT. All alerts are triaged by rule level (1–6 low, 7–11 medium, 12–14 high,
+  15 critical) and persisted in SQLite for history queries and trend analysis.
+  wazuh_analyze_alert returns structured threat indicators and recommended actions
+  with a ready-made llm_prompt_hint for agent reasoning.
+executor: wazuh_siem.ts
+enabled: true
+source: human
+requires_env:
+  - WAZUH_URL
+  - WAZUH_USER
+  - WAZUH_PASS
+
+tools:
+  - name: wazuh_get_token
+    description: >
+      Authenticate with the Wazuh 4.x Manager REST API using Basic auth and obtain a
+      JWT bearer token. The token is cached in-process for up to 15 minutes (Wazuh
+      default TTL is 900s). Call this explicitly if you suspect the token has expired,
+      otherwise wazuh_fetch_alerts handles re-authentication automatically.
+    parameters:
+      type: object
+      properties: {}
+
+  - name: wazuh_fetch_alerts
+    description: >
+      Poll the Wazuh Manager REST API for recent log and alert entries. Authenticates
+      automatically via JWT, normalises each entry, stores new alerts to SQLite
+      (duplicates are silently ignored), and returns a structured summary. Use
+      min_level to filter noise — for example min_level 7 returns medium-and-above only.
+    parameters:
+      type: object
+      properties:
+        limit:
+          type: number
+          description: Maximum number of log entries to fetch from the API. Default 20, max 500.
+        min_level:
+          type: number
+          description: Only include entries at or above this Wazuh rule level (1–15). Default 1.
+
+  - name: wazuh_receive_alert
+    description: >
+      Process a single raw Wazuh alert payload delivered via webhook push. Performs
+      severity triage (rule level 1–6 low, 7–11 medium, 12–14 high, 15 critical),
+      stores the alert to SQLite, and returns a structured triage result including the
+      recommended action. Use this when the agent receives a POST to /webhook/wazuh-alerts
+      from the Wazuh custom integration script.
+    parameters:
+      type: object
+      properties:
+        payload:
+          type: object
+          description: >
+            Raw Wazuh alert JSON as POSTed by the custom integration script on the host.
+            Must contain at minimum a rule object with level and description fields.
+      required:
+        - payload
+
+  - name: wazuh_analyze_alert
+    description: >
+      Deep-analyze a previously stored alert by its alert_id. Classifies the alert into
+      a threat category (threat_detection, authentication, file_integrity, network_activity,
+      high_severity_event, informational), identifies attack indicators, and produces a
+      prioritised list of recommended actions. The llm_prompt_hint field contains a
+      ready-made summary sentence for inclusion in agent responses.
+    parameters:
+      type: object
+      properties:
+        alert_id:
+          type: string
+          description: >
+            The alert_id value as stored in the wazuh_alerts SQLite table. This is the
+            Wazuh alert id field (or a generated id for webhook-pushed alerts).
+      required:
+        - alert_id
+
+  - name: wazuh_get_alert_history
+    description: >
+      Query all stored Wazuh alerts from SQLite with optional filters. Returns alerts
+      in reverse chronological order alongside a severity breakdown summary. Useful for
+      trend analysis, shift handover summaries, and answering questions like "how many
+      critical alerts have we had in the last 24 hours?".
+    parameters:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - critical
+          description: Filter by severity label. Omit to return all severities.
+        since_hours:
+          type: number
+          description: Only return alerts from the last N hours. Omit for all time.
+        agent_name:
+          type: string
+          description: Filter by agent name (substring match, case-insensitive). Omit to include all agents.
+        limit:
+          type: number
+          description: Maximum number of results to return. Default 50.

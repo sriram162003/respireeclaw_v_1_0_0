@@ -1,0 +1,58 @@
+# RespireeClaw Gateway Docker Compose
+
+services:
+  gateway:
+    build: .
+    container_name: respireeclaw-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # WebChat legacy (ws:// chat WebSocket — keep open for backward compat)
+      - "18790:3001"  # Canvas WebSocket
+      - "18789:3002"  # REST API + WebChat UI (/chat) + all Dashboards — PRIMARY ACCESS PORT
+      - "8765:8765"  # ANP
+    volumes:
+      # Persistent data
+      - aura-data:/root/.aura
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NODE_ENV=production
+      - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+      - REST_EXTERNAL_PORT=18789
+      - CANVAS_EXTERNAL_PORT=18790
+      - OLLAMA_BASE_URL=http://ollama:11434
+      # ── Wazuh SIEM Integration ──────────────────────────────────────────────
+      # host.docker.internal resolves to the EC2 host via extra_hosts below.
+      # Set WAZUH_PASS in your .env file — never hard-code it here.
+      - WAZUH_URL=${WAZUH_URL:-https://host.docker.internal:55000}
+      - WAZUH_USER=${WAZUH_USER:-wazuh}
+      - WAZUH_PASS=${WAZUH_PASS}
+      - WAZUH_VERIFY_TLS=${WAZUH_VERIFY_TLS:-false}
+      - WAZUH_INDEXER_URL=${WAZUH_INDEXER_URL:-https://host.docker.internal:9200}
+      - WAZUH_INDEXER_USER=${WAZUH_INDEXER_USER:-admin}
+      - WAZUH_INDEXER_PASS=${WAZUH_INDEXER_PASS}
+      - NVIDIA_API_KEY=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
+    # Allows the container to resolve host.docker.internal → EC2 host.
+    # Requires Docker Engine 20.10+. The special value "host-gateway" is
+    # resolved by Docker to the correct bridge IP automatically.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - ollama
+
+  # Optional: Local Ollama service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+
+volumes:
+  aura-data:
+  ollama-data:

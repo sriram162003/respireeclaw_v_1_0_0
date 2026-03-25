@@ -1,0 +1,90 @@
+name: github_cli
+version: 1.0.0
+description: GitHub CLI operations for managing repositories, pull requests, issues, and CI/CD workflows. Check PR status, create issues, view CI runs, merge PRs, and review code.
+executor: github_cli.ts
+enabled: false
+source: self_written
+requires_env:
+  - GITHUB_TOKEN
+tools:
+  - name: list_pull_requests
+    description: List pull requests for a repository with filtering by state
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner (user or organization)" }
+        repo: { type: string, description: "Repository name" }
+        state: { type: string, description: "Filter by state: open, closed, all (default: open)" }
+      required: [owner, repo]
+  - name: list_issues
+    description: List issues for a repository, excluding pull requests
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        state: { type: string, description: "Filter by state: open, closed, all (default: open)" }
+      required: [owner, repo]
+  - name: check_ci_status
+    description: Check CI check runs and commit status for a specific ref or default branch
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        ref: { type: string, description: "Branch name or commit SHA (optional, uses default branch if omitted)" }
+      required: [owner, repo]
+  - name: create_issue
+    description: Create a new issue in a repository
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        title: { type: string, description: "Issue title" }
+        body: { type: string, description: "Issue body content (markdown supported)" }
+        labels: { type: array, items: { type: string }, description: "Array of label names to apply" }
+      required: [owner, repo, title]
+  - name: create_pull_request
+    description: Create a new pull request from a head branch to base branch
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        title: { type: string, description: "Pull request title" }
+        head: { type: string, description: "Branch containing the changes" }
+        base: { type: string, description: "Branch to merge into (default: main)" }
+        body: { type: string, description: "Pull request description" }
+        draft: { type: boolean, description: "Create as draft PR (default: false)" }
+      required: [owner, repo, title, head]
+  - name: merge_pull_request
+    description: Merge a pull request using merge, squash, or rebase method
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        pull_number: { type: number, description: "Pull request number to merge" }
+        commit_title: { type: string, description: "Custom merge commit title (optional)" }
+        merge_method: { type: string, description: "Merge method: merge, squash, or rebase (default: merge)" }
+      required: [owner, repo, pull_number]
+  - name: get_pull_request_diff
+    description: Get the diff content and statistics for a pull request
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        pull_number: { type: number, description: "Pull request number" }
+      required: [owner, repo, pull_number]
+  - name: list_workflow_runs
+    description: List CI workflow runs for a repository with optional filtering
+    parameters:
+      type: object
+      properties:
+        owner: { type: string, description: "Repository owner" }
+        repo: { type: string, description: "Repository name" }
+        workflow_id: { type: string, description: "Workflow ID or filename (e.g., 'ci.yml', optional)" }
+        branch: { type: string, description: "Filter by branch name (optional)" }
+      required: [owner, repo]

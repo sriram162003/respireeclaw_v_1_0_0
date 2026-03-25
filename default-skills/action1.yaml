@@ -1,0 +1,260 @@
+name: action1
+version: 1.0.0
+description: >
+  Action1 RMM (Remote Monitoring & Management) API integration for endpoint management,
+  patch management, software deployment, and vulnerability remediation. Features include:
+  listing organizations and endpoints, retrieving endpoint details, managing patches,
+  executing scripts on endpoints, viewing vulnerabilities, and generating reports.
+  Use set_action1_credentials to configure API access first.
+executor: action1.ts
+enabled: true
+source: self_written
+requires_env: []
+tools:
+  - name: set_action1_credentials
+    description: >
+      Save Action1 API credentials to config file. You need an API key from Action1 console.
+      Go to Settings > API to generate credentials. Stores credentials in ~/.aura/config/action1.json
+    parameters:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: Action1 API key (generate from app.action1.com > Settings > API)
+        api_secret:
+          type: string
+          description: Action1 API secret
+      required: [api_key, api_secret]
+
+  - name: action1_status
+    description: Check if Action1 credentials are configured and test API connection
+    parameters:
+      type: object
+      properties: {}
+
+  - name: list_organizations
+    description: >
+      List all organizations in your Action1 tenant. Organizations are the top-level
+      containers for managing endpoints and policies.
+    parameters:
+      type: object
+      properties: {}
+
+  - name: list_endpoints
+    description: >
+      List all endpoints (computers/devices) in your Action1 account. Can filter by
+      organization_id. Returns endpoint details including name, OS, status, and last seen time.
+    parameters:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: Filter by organization ID (optional)
+        status:
+          type: string
+          description: Filter by status - online, offline, or all (default all)
+        limit:
+          type: number
+          description: Maximum number of endpoints to return (default 50)
+
+  - name: get_endpoint_details
+    description: >
+      Get detailed information about a specific endpoint including hardware specs,
+      installed software, patch status, and recent activity.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: The endpoint ID to query
+      required: [endpoint_id]
+
+  - name: get_endpoint_patches
+    description: >
+      Get patch status for an endpoint. Shows available missing patches and their severity.
+      Use this to identify which endpoints need updates.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: The endpoint ID to check
+        severity:
+          type: string
+          description: Filter by severity - critical, important, moderate, or all (default all)
+
+  - name: install_endpoint_patches
+    description: >
+      Install missing patches on an endpoint. Can specify patch IDs or install all missing patches.
+      Returns installation status and any errors.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: The endpoint ID to patch
+        patch_ids:
+          type: array
+          description: Array of patch KB IDs to install (optional - installs all if not specified)
+          items:
+            type: string
+        reboot:
+          type: boolean
+          description: Whether to reboot after installing patches (default false)
+      required: [endpoint_id]
+
+  - name: run_script_on_endpoint
+    description: >
+      Execute a PowerShell or batch script on a specific endpoint. Scripts run via
+      Action1's remote execution engine. Returns script output and exit code.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: Target endpoint ID
+        script:
+          type: string
+          description: PowerShell or batch script to execute
+        script_type:
+          type: string
+          description: Script type - powershell or batch (default powershell)
+        timeout:
+          type: number
+          description: Execution timeout in seconds (default 60)
+      required: [endpoint_id, script]
+
+  - name: run_script_on_endpoints
+    description: >
+      Execute a script on multiple endpoints in parallel. Useful for mass deployments
+      or configuration changes across multiple machines.
+    parameters:
+      type: object
+      properties:
+        endpoint_ids:
+          type: array
+          description: Array of endpoint IDs to target
+          items:
+            type: string
+        script:
+          type: string
+          description: PowerShell or batch script to execute
+        script_type:
+          type: string
+          description: Script type - powershell or batch (default powershell)
+        timeout:
+          type: number
+          description: Execution timeout in seconds (default 60)
+      required: [endpoint_ids, script]
+
+  - name: get_vulnerabilities
+    description: >
+      Get vulnerability scan results for endpoints. Shows detected CVEs, severity levels,
+      and remediation status. Can filter by endpoint or severity.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: Filter by specific endpoint ID (optional)
+        severity:
+          type: string
+          description: Filter by severity - critical, high, medium, low, or all (default all)
+        status:
+          type: string
+          description: Filter by status - open, remediated, or all (default all)
+        limit:
+          type: number
+          description: Maximum results to return (default 50)
+
+  - name: remediate_vulnerability
+    description: >
+      Initiate remediation for a detected vulnerability. May involve patching,
+      configuration changes, or software updates.
+    parameters:
+      type: object
+      properties:
+        vulnerability_id:
+          type: string
+          description: The vulnerability ID to remediate
+        action:
+          type: string
+          description: Remediation action - patch, ignore, or schedule
+        endpoint_id:
+          type: string
+          description: Endpoint ID to remediate
+      required: [vulnerability_id, action]
+
+  - name: list_software
+    description: >
+      List installed software on an endpoint or across an organization. Shows
+      software name, version, publisher, and install date.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: Specific endpoint to query (optional)
+        organization_id:
+          type: string
+          description: Organization ID to query (optional)
+        search:
+          type: string
+          description: Search/filter by software name
+
+  - name: deploy_software
+    description: >
+      Deploy software to endpoints. Can target specific endpoints or use
+      organization-wide deployment.
+    parameters:
+      type: object
+      properties:
+        package_name:
+          type: string
+          description: Software package name to deploy
+        endpoint_ids:
+          type: array
+          description: Specific endpoint IDs to deploy to (optional)
+          items:
+            type: string
+        organization_id:
+          type: string
+          description: Organization ID for deployment (optional)
+        install_params:
+          type: string
+          description: Installation parameters/arguments (optional)
+      required: [package_name]
+
+  - name: restart_endpoint
+    description: >
+      Remote restart or shutdown an endpoint. Useful for completing patch installations
+      or system maintenance.
+    parameters:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: Endpoint ID to restart
+        action:
+          type: string
+          description: Action - restart or shutdown (default restart)
+      required: [endpoint_id]
+
+  - name: get_reports
+    description: >
+      Generate or retrieve reports on patch compliance, endpoint status, vulnerabilities,
+      and software inventory.
+    parameters:
+      type: object
+      properties:
+        report_type:
+          type: string
+          description: >
+            Type of report - patch_compliance, endpoint_status, vulnerabilities,
+            software_inventory, or all (default all)
+        organization_id:
+          type: string
+          description: Filter by organization ID (optional)
+        date_range:
+          type: string
+          description: Date range - today, last_7_days, last_30_days, or all (default last_30_days)
