@@ -359,7 +359,7 @@ export class AgentOrchestrator {
       },
       channel: {
         send: (nid: string, text?: string) =>
-          self.deps.channel?.send(nid, text) ?? Promise.resolve(),
+          self.deps.channel?.send(nid, text ?? '') ?? Promise.resolve(),
       },
       canvas: { append: () => {}, clear: () => {} },
       llm: {

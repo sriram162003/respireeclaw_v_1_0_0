@@ -280,7 +280,7 @@ const WF3_TEMPLATES = [
 
 interface WorkflowStep {
   operation: string;
-  params: Record<string, unknown>;
+  params: Record<string, string>;
 }
 
 interface SkillToolExecutor {
@@ -1020,7 +1020,7 @@ export class RestAPI {
         const body = await this.readBody(req);
         const wf = JSON.parse(body) as { name: string; steps: WorkflowStep[]; dry_run?: boolean };
         const workflowId = `${wf.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`;
-        const stepsWithDryRun = wf.dry_run ? wf.steps.map(s => ({ ...s, params: { ...s.params, dry_run: true } })) : wf.steps;
+        const stepsWithDryRun = wf.dry_run ? wf.steps.map(s => ({ ...s, params: { ...s.params, dry_run: 'true' } })) : wf.steps;
         runWorkflowReal(workflowId, wf.name, stepsWithDryRun, this.params.skillsEngine).catch(console.error);
         return this.json(res, 200, { workflow_id: workflowId, started: true });
       }
