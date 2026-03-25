@@ -76,7 +76,7 @@ jobs:
     needs: build-push
     environment: production
     # Only deploy on pushes to main or version tags — not PRs
-    if: github.event_name == 'push' && secrets.DEPLOY_HOST != ''
+    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v4
