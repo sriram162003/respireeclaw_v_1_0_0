@@ -1,0 +1,47 @@
+name: web_search
+version: 2.0.0
+description: Real browser-based web search, page browsing and screenshot capture powered by Playwright + Chromium
+executor: web_search.ts
+enabled: true
+source: human
+requires_env: []
+tools:
+  - name: search
+    description: Search the web using a real browser (DuckDuckGo). Returns actual page results with titles, snippets and URLs. Use this for current events, facts, or any information lookup.
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The search query
+        num:
+          type: number
+          description: Number of results to return (default 8, max 20)
+      required: [query]
+
+  - name: browse
+    description: Navigate to a URL with a real browser and extract the readable text content of the page. Good for reading articles, documentation, or any web page.
+    parameters:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The full URL to visit (must start with http:// or https://)
+        extract:
+          type: string
+          enum: [text, links, both]
+          description: "What to extract: 'text' (default) for readable content, 'links' for all links, 'both' for content and links"
+      required: [url]
+
+  - name: screenshot
+    description: Take a screenshot of a web page and save it to the workspace. Returns the file path of the saved screenshot.
+    parameters:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The full URL to screenshot
+        full_page:
+          type: boolean
+          description: Capture full scrollable page (default false — viewport only)
+      required: [url]

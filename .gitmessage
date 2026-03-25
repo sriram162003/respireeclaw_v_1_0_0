@@ -1,0 +1,11 @@
+# commit-msg template
+
+# <type>(<scope>): <subject>
+#
+# Types: feat, fix, docs, style, refactor, test, chore
+# Example: feat(dashboard): add new workflow UI
+#
+# Subject line (max 50 chars)
+# Body (optional, wrap at 72 chars)
+#
+# Footer (optional, e.g. Closes #123)

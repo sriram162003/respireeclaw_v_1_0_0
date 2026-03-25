@@ -1,0 +1,132 @@
+name: workflow_automation_v2
+version: 2.0.0
+description: >
+  General-purpose workflow automation engine. Define named workflows in YAML stored at
+  ~/.aura/workflows/. Supports: webhook triggers (match key → fire), conditional branching
+  (if/else on any field), multi-step chaining, retry logic with back-off, skill calls,
+  HTTP webhooks, waits, transforms, logs, parallel execution (run any mix of sub-steps
+  concurrently via Promise.allSettled), and cron scheduling. All executions persisted
+  to SQLite with full step history.
+executor: workflow_automation_v2.ts
+enabled: true
+source: self_written
+requires_env: []
+
+tools:
+
+  - name: workflow_run
+    description: >
+      Execute a named workflow by name with an optional input payload. The payload is
+      available as {{payload.field}} in all step templates. Set async=true to fire-and-forget
+      (returns immediately with execution_id). Default is synchronous (waits for completion).
+    parameters:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the workflow to run (must exist in ~/.aura/workflows/)
+        payload:
+          type: object
+          description: Input data passed as {{payload.*}} in step templates
+        async:
+          type: boolean
+          description: If true, start the workflow in background and return immediately
+      required: [name]
+
+  - name: workflow_save
+    description: >
+      Save or update a workflow definition to ~/.aura/workflows/<name>.yaml.
+      The definition object must include: name, description, trigger (type: manual|webhook|schedule),
+      and steps (array of step objects). Each step has: id, type, type-specific fields,
+      on_success, on_failure (optional), retry (optional: {max_attempts, delay_ms}).
+      Step types: webhook, condition, wait, skill, transform, log.
+      Example step (webhook): {id: "notify", type: "webhook", url: "https://...", payload: {msg: "{{payload.text}}"}, on_success: "end"}
+      Example step (condition): {id: "check", type: "condition", condition: {field: "payload.cpu", operator: "gt", value: 80}, on_true: "alert", on_false: "end"}
+    parameters:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Workflow name (used as filename and run identifier)
+        definition:
+          type: object
+          description: >
+            Full workflow definition object. Schema:
+            { name, description, trigger: {type, webhook_key?, schedule?}, steps: [{id, type, ...fields, on_success?, on_failure?, retry?}] }
+      required: [name, definition]
+
+  - name: workflow_list
+    description: >
+      List all saved workflow definitions from ~/.aura/workflows/ and the 50 most recent
+      execution records from SQLite. Returns definitions (name, description, step count,
+      trigger type) and recent_executions (id, status, started_at, completed_at).
+    parameters:
+      type: object
+      properties: {}
+      required: []
+
+  - name: workflow_delete
+    description: Delete a saved workflow definition by name. Removes the YAML file from ~/.aura/workflows/.
+    parameters:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the workflow to delete
+      required: [name]
+
+  - name: workflow_trigger_webhook
+    description: >
+      Process an incoming webhook event and fire all workflows whose trigger.webhook_key
+      matches the given key. Each matching workflow is started asynchronously.
+      Returns the count of triggered workflows and their execution IDs.
+      Use this when an external system (monitoring, CI/CD, etc.) sends an event.
+    parameters:
+      type: object
+      properties:
+        webhook_key:
+          type: string
+          description: The webhook key to match against workflow trigger configurations
+        payload:
+          type: object
+          description: The webhook payload — available as {{payload.*}} in triggered workflows
+      required: [webhook_key, payload]
+
+  - name: workflow_status
+    description: >
+      Get the status of a specific execution by execution_id, or list recent executions
+      for a workflow_name (or all workflows if neither is provided).
+      Returns status (pending|running|completed|failed), steps_done, result, and error.
+    parameters:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          description: Specific execution ID to look up (returns full result + step outputs)
+        workflow_name:
+          type: string
+          description: Filter executions by workflow name
+        limit:
+          type: number
+          description: Max number of executions to return (default 20)
+      required: []
+
+  - name: workflow_schedule
+    description: >
+      Register or update a cron schedule for a named workflow. The gateway scheduler reads
+      the wf_scheduled table and fires due workflows automatically.
+      Cron format: "minute hour day-of-month month day-of-week" (standard 5-field cron).
+      Examples: "0 9 * * 1-5" (weekdays 9am), "*/30 * * * *" (every 30 min), "0 0 * * *" (daily midnight).
+    parameters:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the workflow to schedule (must already be saved)
+        cron:
+          type: string
+          description: Cron expression (5 fields)
+        enabled:
+          type: boolean
+          description: Whether the schedule is active (default true)
+      required: [name, cron]

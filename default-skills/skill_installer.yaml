@@ -1,0 +1,55 @@
+name: skill_installer
+version: 1.0.0
+description: Install skills from GitHub repositories. Supports installing from public or private GitHub repos by providing the repository URL or owner/repo format. Automatically detects and installs skill definitions (YAML files) and their executors (TypeScript/JavaScript files).
+executor: skill_installer.ts
+enabled: true
+source: human
+requires_env:
+  - GITHUB_TOKEN
+tools:
+  - name: install_skill_from_github
+    description: Install a skill from a GitHub repository. Provide either a full GitHub URL or owner/repo format. The skill must contain YAML definition files and matching executor files.
+    parameters:
+      type: object
+      properties:
+        repo:
+          type: string
+          description: "GitHub repository in format 'owner/repo' or full URL like 'https://github.com/owner/repo' or 'https://raw.githubusercontent.com/owner/repo/main/'"
+        branch:
+          type: string
+          description: "Branch to install from (default: main)"
+          default: "main"
+        skill_path:
+          type: string
+          description: "Optional subdirectory path within the repo where skills are located (e.g., 'skills' or 'src/skills')"
+      required:
+        - repo
+  - name: list_installed_skills
+    description: List all currently installed skills in the user's skills directory
+    parameters:
+      type: object
+      properties: {}
+  - name: remove_installed_skill
+    description: Remove an installed skill from the user's skills directory
+    parameters:
+      type: object
+      properties:
+        skill_name:
+          type: string
+          description: "Name of the skill to remove"
+      required:
+        - skill_name
+  - name: search_github_skills
+    description: Search GitHub for skill repositories using the GitHub API
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: "Search query (e.g., 'aura-gateway skill' or 'ai-assistant tools')"
+        per_page:
+          type: number
+          description: "Number of results to return (max 100)"
+          default: 10
+      required:
+        - query

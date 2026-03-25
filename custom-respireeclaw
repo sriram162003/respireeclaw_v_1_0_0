@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""
+RespireeClaw Gateway — Wazuh 4.x Custom Integration Script
+Forwards Wazuh alerts to the Gateway webhook endpoint in real-time.
+
+INSTALL (run on the EC2 host, outside Docker):
+  sudo cp custom-respireeclaw /var/ossec/integrations/
+  sudo chmod 750 /var/ossec/integrations/custom-respireeclaw
+  sudo chown root:wazuh /var/ossec/integrations/custom-respireeclaw
+
+Then add to /var/ossec/etc/ossec.conf inside <ossec_config>:
+
+  <integration>
+    <name>custom-respireeclaw</name>
+    <hook_url>http://localhost:3002/webhook/wazuh-alerts</hook_url>
+    <level>7</level>
+    <alert_format>json</alert_format>
+  </integration>
+
+Then restart: sudo systemctl restart wazuh-manager
+
+Wazuh calls this script as: custom-respireeclaw <alert_json_file> <api_key>
+The alert JSON file path is passed as sys.argv[1].
+"""
+
+import json
+import os
+import sys
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone
+
+# ── Configuration ──────────────────────────────────────────────────────────────
+# Gateway runs on the same host, so localhost:3002 is reachable directly.
+# Override via environment variable if your setup differs.
+GATEWAY_WEBHOOK_URL = os.environ.get(
+    'RESPIREECLAW_WEBHOOK_URL',
+    'http://localhost:3002/webhook/wazuh-alerts'
+)
+
+# Optional static Bearer token if the Gateway REST API requires authentication.
+# Leave empty if the webhook endpoint does not require auth (default).
+GATEWAY_TOKEN = os.environ.get('RESPIREECLAW_TOKEN', '')
+
+LOG_FILE = '/var/ossec/logs/integrations.log'
+REQUEST_TIMEOUT = 10  # seconds
+
+
+def log(msg: str) -> None:
+    ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    entry = f'[{ts}] custom-respireeclaw: {msg}\n'
+    try:
+        with open(LOG_FILE, 'a') as f:
+            f.write(entry)
+    except Exception:
+        pass  # Never crash the Wazuh manager process due to a logging failure
+
+
+def send_alert(alert: dict) -> None:
+    payload = json.dumps(alert).encode('utf-8')
+    headers = {'Content-Type': 'application/json'}
+    if GATEWAY_TOKEN:
+        headers['Authorization'] = f'Bearer {GATEWAY_TOKEN}'
+
+    req = urllib.request.Request(
+        GATEWAY_WEBHOOK_URL,
+        data=payload,
+        headers=headers,
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+            status = resp.getcode()
+            rule   = alert.get('rule', {})
+            log(
+                f'OK HTTP {status} — '
+                f'rule_id={rule.get("id", "?")} '
+                f'level={rule.get("level", "?")} '
+                f'agent={alert.get("agent", {}).get("name", "?")}'
+            )
+    except urllib.error.HTTPError as e:
+        log(f'HTTP error {e.code} {e.reason} forwarding alert to {GATEWAY_WEBHOOK_URL}')
+    except urllib.error.URLError as e:
+        log(f'Connection error forwarding alert: {e.reason} — is the Gateway running on port 3002?')
+    except Exception as e:
+        log(f'Unexpected error: {e}')
+
+
+def main() -> None:
+    # Wazuh invokes: /var/ossec/integrations/custom-respireeclaw <alert_file> [api_key]
+    if len(sys.argv) < 2:
+        log('ERROR: No alert file path provided as argument — Wazuh should pass it as sys.argv[1]')
+        sys.exit(0)  # Exit 0 so Wazuh does not treat this as a fatal error
+
+    alert_file = sys.argv[1]
+    try:
+        with open(alert_file, 'r', encoding='utf-8') as f:
+            alert = json.load(f)
+    except FileNotFoundError:
+        log(f'ERROR: Alert file not found: {alert_file}')
+        sys.exit(0)
+    except json.JSONDecodeError as e:
+        log(f'ERROR: Failed to parse alert JSON from {alert_file}: {e}')
+        sys.exit(0)
+    except Exception as e:
+        log(f'ERROR: Could not read alert file {alert_file}: {e}')
+        sys.exit(0)
+
+    send_alert(alert)
+
+
+if __name__ == '__main__':
+    main()

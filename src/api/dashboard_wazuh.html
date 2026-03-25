@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wazuh SIEM — RespireeClaw</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d2e;--surface2:#1e2235;--border:#2d3148;
+  --text:#e2e8f0;--subtext:#94a3b8;--purple:#7c6aff;--purple2:#6c63ff;
+  --red:#ef4444;--orange:#f97316;--yellow:#eab308;--green:#22c55e;--blue:#3b82f6;
+  --critical:#ef4444;--high:#f97316;--medium:#eab308;--low:#22c55e;
+}
+:root[data-theme="light"]{
+  --bg:#f0f2f5;--surface:#ffffff;--surface2:#f8f9fa;--border:#d1d5db;
+  --text:#1f2937;--subtext:#6b7280;--purple:#7c6aff;--purple2:#6c63ff;
+  --red:#dc2626;--orange:#ea580c;--yellow:#ca8a04;--green:#16a34a;--blue:#2563eb;
+  --critical:#dc2626;--high:#ea580c;--medium:#ca8a04;--low:#16a34a;
+}
+.theme-switch{position:relative;width:44px;height:24px;display:inline-flex;align-items:center}
+.theme-switch input{opacity:0;width:0;height:0}
+.theme-slider{position:absolute;inset:0;background:var(--surface);border:1px solid var(--border);border-radius:24px;cursor:pointer;transition:all .3s}
+.theme-slider::before{content:'';position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:var(--subtext);transition:all .3s}
+.theme-switch input:checked+.theme-slider{background:var(--purple);border-color:var(--purple)}
+.theme-switch input:checked+.theme-slider::before{transform:translateX(20px);background:#fff}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;min-height:100vh}
+
+/* ── Login screen ── */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999}
+#login-screen.hidden{display:none}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 48px;width:100%;max-width:420px;text-align:center}
+.login-box .logo{font-size:26px;font-weight:700;color:var(--purple);letter-spacing:1px;margin-bottom:4px}
+.login-box .sub{font-size:13px;color:var(--subtext);margin-bottom:28px}
+.login-box label{display:block;text-align:left;font-size:12px;color:var(--subtext);margin-bottom:6px;font-weight:500}
+.login-box input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:8px;font-size:14px;font-family:monospace;margin-bottom:14px;transition:border-color .15s}
+.login-box input:focus{outline:none;border-color:var(--purple)}
+.login-box .btn-login{width:100%;background:var(--purple2);color:#fff;border:none;padding:12px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+.login-box .btn-login:hover{background:var(--purple)}
+.login-box .err{color:var(--red);font-size:12px;margin-top:-8px;margin-bottom:12px;min-height:16px}
+.login-box .hint{font-size:11px;color:#475569;margin-top:14px}
+.login-box .hint code{background:var(--bg);padding:2px 6px;border-radius:4px;font-family:monospace}
+
+/* ── Layout ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.hdr-logo{font-size:15px;font-weight:700;color:var(--purple);letter-spacing:.5px}
+.hdr-sep{color:var(--border);font-size:18px}
+.hdr-title{font-size:14px;color:var(--subtext)}
+.hdr-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;margin-left:4px;transition:background .3s,box-shadow .3s}
+.hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;transition:border-color .15s,color .15s;white-space:nowrap}
+.btn:hover{border-color:var(--purple);color:var(--purple)}
+.btn.primary{background:var(--purple2);border-color:var(--purple2);color:#fff}
+.btn.primary:hover{background:var(--purple)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-icon{background:none;border:none;cursor:pointer;color:var(--subtext);font-size:16px;padding:4px 6px;border-radius:5px;transition:color .15s}
+.btn-icon:hover{color:var(--text)}
+
+main{padding:24px;max-width:1600px;margin:0 auto}
+
+/* ── Stats row ── */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px}
+.stat-card .label{font-size:11px;color:var(--subtext);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.stat-card .value{font-size:28px;font-weight:700;line-height:1}
+.stat-card .sub{font-size:11px;color:var(--subtext);margin-top:4px}
+.stat-card.critical .value{color:var(--critical)}
+.stat-card.high     .value{color:var(--high)}
+.stat-card.medium   .value{color:var(--medium)}
+.stat-card.low      .value{color:var(--low)}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.toolbar input,.toolbar select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:7px;font-size:13px;min-width:140px}
+.toolbar input:focus,.toolbar select:focus{outline:none;border-color:var(--purple)}
+.toolbar select option{background:var(--surface)}
+.auto-label{font-size:12px;color:var(--subtext);display:flex;align-items:center;gap:6px;margin-left:auto}
+.auto-label input[type=checkbox]{accent-color:var(--purple)}
+
+/* ── Table ── */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-wrap table{width:100%;border-collapse:collapse}
+.table-wrap thead th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--subtext);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap}
+.table-wrap tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.table-wrap tbody tr:last-child{border-bottom:none}
+.table-wrap tbody tr:hover{background:var(--surface2)}
+.table-wrap tbody tr.selected{background:#7c6aff18;border-left:2px solid var(--purple)}
+td{padding:9px 14px;font-size:13px;vertical-align:middle}
+.td-time{color:var(--subtext);font-size:11px;font-family:monospace;white-space:nowrap}
+.td-rule{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-agent{font-family:monospace;font-size:12px}
+.td-level{font-family:monospace;font-size:12px;text-align:center}
+.empty{text-align:center;padding:48px;color:var(--subtext)}
+
+/* ── Severity badge ── */
+.sev{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.sev.critical{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
+.sev.high    {background:#f9731622;color:#f97316;border:1px solid #f9731644}
+.sev.medium  {background:#eab30822;color:#eab308;border:1px solid #eab30844}
+.sev.low     {background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
+
+/* ── Detail panel ── */
+#detail-panel{position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:1px solid var(--border);padding:0;overflow-y:auto;transition:right .25s ease;z-index:200;display:flex;flex-direction:column}
+#detail-panel.open{right:0}
+.panel-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;position:sticky;top:0;background:var(--surface);z-index:1}
+.panel-hdr h3{font-size:14px;font-weight:600;flex:1}
+.panel-body{padding:20px;flex:1}
+.detail-section{margin-bottom:20px}
+.detail-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--subtext);margin-bottom:10px;font-weight:600}
+.detail-row{display:flex;gap:8px;margin-bottom:6px;font-size:13px}
+.detail-row .dk{color:var(--subtext);min-width:130px;flex-shrink:0}
+.detail-row .dv{word-break:break-all}
+.action-list{list-style:none;padding:0}
+.action-list li{padding:7px 10px;background:var(--surface2);border-radius:7px;margin-bottom:6px;font-size:12px;border-left:3px solid var(--purple);line-height:1.4}
+.llm-hint{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;line-height:1.6;color:var(--subtext)}
+.raw-toggle{font-size:11px;color:var(--purple);cursor:pointer;margin-top:8px;display:inline-block}
+.raw-json{background:#0a0c14;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:#a0aec0;overflow-x:auto;margin-top:8px;display:none;white-space:pre;max-height:300px;overflow-y:auto}
+.raw-json.visible{display:block}
+
+/* ── Top rules ── */
+.top-rules{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px}
+.top-rules h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--subtext);margin-bottom:12px;font-weight:600}
+.rule-bar{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:12px}
+.rule-bar .rb-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rule-bar .rb-track{width:120px;height:6px;background:var(--surface2);border-radius:3px;flex-shrink:0}
+.rule-bar .rb-fill{height:100%;background:var(--purple);border-radius:3px}
+.rule-bar .rb-cnt{color:var(--subtext);min-width:28px;text-align:right}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{border-color:var(--red);color:var(--red)}
+
+/* ── Nav links ── */
+.nav-links{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}
+.nav-link{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 15px;color:var(--purple);font-size:13px;text-decoration:none;display:flex;align-items:center;gap:6px;transition:border-color .15s}
+.nav-link:hover{border-color:var(--purple2)}
+.nav-link.active{border-color:var(--purple);background:#7c6aff18}
+
+/* ── Loading ── */
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="logo">RespireeClaw</div>
+    <div class="sub">Wazuh SIEM Dashboard</div>
+    <label for="key-input">API Key</label>
+    <input type="password" id="key-input" placeholder="sk-aura-..." autocomplete="off"
+           onkeydown="if(event.key==='Enter') doLogin()">
+    <div class="err" id="login-err"></div>
+    <button class="btn-login" onclick="doLogin()">Sign In</button>
+    <div class="hint">Find your key: <code>cat /root/.aura/keys.yaml</code></div>
+  </div>
+</div>
+
+<!-- App -->
+<header>
+  <span class="hdr-logo">RespireeClaw</span>
+  <span class="hdr-sep">/</span>
+  <span class="hdr-title">Wazuh SIEM</span>
+  <span class="hdr-dot" id="hdr-dot"></span>
+  <div class="hdr-actions">
+    <label class="theme-switch" title="Toggle theme">
+      <input type="checkbox" id="theme-toggle" onchange="toggleTheme()">
+      <span class="theme-slider"></span>
+    </label>
+    <button class="btn" id="btn-fetch" onclick="fetchFromWazuh()">↓ Poll Wazuh API</button>
+    <button class="btn primary" onclick="loadAlerts()">⟳ Refresh</button>
+    <button class="btn" onclick="signOut()">Sign Out</button>
+  </div>
+</header>
+
+<main>
+  <!-- Nav -->
+  <div class="nav-links">
+    <a class="nav-link" href="/dashboard" target="_blank">🏠 Dashboard</a>
+    <a class="nav-link" href="/chat" target="_blank">💬 WebChat</a>
+    <a class="nav-link" href="/dashboard2" target="_blank">⚙️ Workflows</a>
+    <a class="nav-link" href="/dashboard3" target="_blank">🔄 Automation</a>
+    <a class="nav-link" href="/dashboard4" target="_blank">🤖 Agent Teams</a>
+    <a class="nav-link active" href="/wazuh">🛡️ Wazuh SIEM</a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="label">Total Alerts</div>
+      <div class="value" id="stat-total">—</div>
+      <div class="sub" id="stat-total-sub">all time</div>
+    </div>
+    <div class="stat-card critical">
+      <div class="label">Critical</div>
+      <div class="value" id="stat-critical">—</div>
+      <div class="sub" id="stat-critical-24h">24h: —</div>
+    </div>
+    <div class="stat-card high">
+      <div class="label">High</div>
+      <div class="value" id="stat-high">—</div>
+      <div class="sub" id="stat-high-24h">24h: —</div>
+    </div>
+    <div class="stat-card medium">
+      <div class="label">Medium</div>
+      <div class="value" id="stat-medium">—</div>
+      <div class="sub" id="stat-medium-24h">24h: —</div>
+    </div>
+    <div class="stat-card low">
+      <div class="label">Low</div>
+      <div class="value" id="stat-low">—</div>
+      <div class="sub" id="stat-low-24h">24h: —</div>
+    </div>
+  </div>
+
+  <!-- Top rules -->
+  <div class="top-rules" id="top-rules-section" style="display:none">
+    <h3>Top Triggered Rules</h3>
+    <div id="top-rules-list"></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <select id="filter-severity" onchange="loadAlerts()">
+      <option value="">All Severities</option>
+      <option value="critical">Critical</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+    </select>
+    <select id="filter-hours" onchange="loadAlerts()">
+      <option value="">All Time</option>
+      <option value="1">Last 1h</option>
+      <option value="6">Last 6h</option>
+      <option value="24" selected>Last 24h</option>
+      <option value="72">Last 3d</option>
+      <option value="168">Last 7d</option>
+    </select>
+    <input type="text" id="filter-agent" placeholder="Agent name..." oninput="debounceLoad()"
+           style="min-width:180px">
+    <select id="filter-limit" onchange="loadAlerts()">
+      <option value="50">50 rows</option>
+      <option value="100" selected>100 rows</option>
+      <option value="200">200 rows</option>
+      <option value="500">500 rows</option>
+    </select>
+    <span id="table-count" style="font-size:12px;color:var(--subtext);margin-left:4px"></span>
+    <label class="auto-label">
+      <input type="checkbox" id="auto-refresh" onchange="toggleAuto()"> Auto-refresh 30s
+    </label>
+  </div>
+
+  <!-- Alert table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Timestamp</th>
+          <th>Agent</th>
+          <th>IP</th>
+          <th>Rule</th>
+          <th style="text-align:center">Level</th>
+          <th>Location</th>
+        </tr>
+      </thead>
+      <tbody id="alert-tbody">
+        <tr><td colspan="7" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Detail panel -->
+<div id="detail-panel">
+  <div class="panel-hdr">
+    <h3 id="panel-title">Alert Detail</h3>
+    <button class="btn-icon" onclick="closePanel()" title="Close">✕</button>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Theme Toggle ──────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const html = document.documentElement;
+  const isLight = html.dataset.theme === 'light';
+  const slider = document.getElementById('theme-toggle');
+  if (slider) slider.checked = !isLight;
+  html.dataset.theme = isLight ? '' : 'light';
+  localStorage.setItem('aura_theme', isLight ? '' : 'light');
+}
+(function initTheme() {
+  const saved = localStorage.getItem('aura_theme');
+  if (saved === 'light') document.documentElement.dataset.theme = 'light';
+  const slider = document.getElementById('theme-toggle');
+  if (slider) slider.checked = saved === 'light';
+})();
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function getKey()      { return localStorage.getItem('aura_api_key') || ''; }
+function saveKey(k)    { localStorage.setItem('aura_api_key', k); }
+function clearKey()    { localStorage.removeItem('aura_api_key'); }
+
+async function doLogin() {
+  const key = document.getElementById('key-input').value.trim();
+  const err = document.getElementById('login-err');
+  if (!key) { err.textContent = 'Please enter your API key.'; return; }
+  err.textContent = '';
+  try {
+    const res = await fetch('/api/llm/config', { headers: { 'Authorization': 'Bearer ' + key } });
+    if (res.status === 401) { err.textContent = 'Invalid API key — try again.'; return; }
+    saveKey(key);
+    showApp();
+  } catch {
+    err.textContent = 'Cannot reach gateway. Is the server running?';
+  }
+}
+
+function signOut() { clearKey(); location.reload(); }
+
+function showApp() {
+  document.getElementById('login-screen').classList.add('hidden');
+  init();
+}
+
+// Patch window.fetch to always inject the API key
+const _fetch = window.fetch.bind(window);
+window.fetch = function(url, opts = {}) {
+  const key = getKey();
+  const headers = Object.assign({}, opts.headers || {});
+  if (key) headers['Authorization'] = 'Bearer ' + key;
+  return _fetch(url, Object.assign({}, opts, { headers }));
+};
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = (type === 'success' ? '✓ ' : '✗ ') + msg;
+  el.className = 'toast show' + (type === 'error' ? ' error' : '');
+  setTimeout(() => el.className = 'toast', 3200);
+}
+
+// ── Severity helpers ──────────────────────────────────────────────────────────
+function sevBadge(s) {
+  return `<span class="sev ${s}">${s}</span>`;
+}
+function sevColor(s) {
+  return { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e' }[s] || '#94a3b8';
+}
+
+// ── Time format ───────────────────────────────────────────────────────────────
+function fmtTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d)) return ts;
+  const now = Date.now();
+  const diff = Math.floor((now - d) / 1000);
+  if (diff < 60)   return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch('/wazuh/api/stats');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    document.getElementById('stat-total').textContent    = d.total ?? 0;
+    document.getElementById('stat-critical').textContent = d.by_severity?.critical ?? 0;
+    document.getElementById('stat-high').textContent     = d.by_severity?.high     ?? 0;
+    document.getElementById('stat-medium').textContent   = d.by_severity?.medium   ?? 0;
+    document.getElementById('stat-low').textContent      = d.by_severity?.low      ?? 0;
+    document.getElementById('stat-critical-24h').textContent = `24h: ${d.last_24h?.critical ?? 0}`;
+    document.getElementById('stat-high-24h').textContent     = `24h: ${d.last_24h?.high     ?? 0}`;
+    document.getElementById('stat-medium-24h').textContent   = `24h: ${d.last_24h?.medium   ?? 0}`;
+    document.getElementById('stat-low-24h').textContent      = `24h: ${d.last_24h?.low      ?? 0}`;
+
+    // Top rules
+    if (d.top_rules && d.top_rules.length > 0) {
+      const maxCnt = d.top_rules[0].cnt;
+      document.getElementById('top-rules-section').style.display = '';
+      document.getElementById('top-rules-list').innerHTML = d.top_rules.map(r => `
+        <div class="rule-bar">
+          <span class="rb-label" title="${escHtml(r.rule_description)}">${escHtml(r.rule_description)}</span>
+          <div class="rb-track"><div class="rb-fill" style="width:${Math.round(r.cnt/maxCnt*100)}%"></div></div>
+          <span class="rb-cnt">${r.cnt}</span>
+        </div>`).join('');
+    }
+
+    // Populate agent filter
+    if (d.agents && d.agents.length > 0) {
+      const sel = document.getElementById('filter-agent');
+      // Only use datalist — don't replace the text input
+    }
+
+    // Status dot
+    const dot = document.getElementById('hdr-dot');
+    dot.style.background = '#22c55e';
+    dot.style.boxShadow  = '0 0 6px #22c55e';
+  } catch { /* ignore */ }
+}
+
+// ── Alert table ───────────────────────────────────────────────────────────────
+let selectedAlertId = null;
+
+async function loadAlerts() {
+  const severity   = document.getElementById('filter-severity').value;
+  const sinceHours = document.getElementById('filter-hours').value;
+  const agentName  = document.getElementById('filter-agent').value.trim();
+  const limit      = document.getElementById('filter-limit').value;
+
+  const params = new URLSearchParams();
+  if (severity)   params.set('severity', severity);
+  if (sinceHours) params.set('since_hours', sinceHours);
+  if (agentName)  params.set('agent_name', agentName);
+  if (limit)      params.set('limit', limit);
+
+  const tbody = document.getElementById('alert-tbody');
+  tbody.innerHTML = `<tr><td colspan="7" class="empty"><span class="spinner"></span></td></tr>`;
+
+  try {
+    const r = await fetch('/wazuh/api/alerts?' + params.toString());
+    if (!r.ok) { tbody.innerHTML = `<tr><td colspan="7" class="empty">Error loading alerts</td></tr>`; return; }
+    const d = await r.json();
+    renderAlerts(d.alerts || []);
+    document.getElementById('table-count').textContent = `${d.total} alert${d.total !== 1 ? 's' : ''}`;
+  } catch {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">Failed to fetch alerts</td></tr>`;
+  }
+}
+
+function renderAlerts(alerts) {
+  const tbody = document.getElementById('alert-tbody');
+  if (!alerts.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">No alerts found for the selected filters</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = alerts.map(a => {
+    const groups = (() => { try { return JSON.parse(a.groups || '[]').slice(0,2).join(', '); } catch { return ''; } })();
+    const selected = a.alert_id === selectedAlertId ? ' selected' : '';
+    return `<tr class="${selected}" onclick="openAlert('${escAttr(a.alert_id)}')">
+      <td>${sevBadge(a.severity)}</td>
+      <td class="td-time" title="${escAttr(a.timestamp)}">${fmtTime(a.created_at || a.timestamp)}</td>
+      <td class="td-agent">${escHtml(a.agent_name)}</td>
+      <td class="td-agent" style="color:var(--subtext)">${escHtml(a.agent_ip || '—')}</td>
+      <td class="td-rule" title="${escAttr(a.rule_description)}">${escHtml(a.rule_description)}${groups ? `<br><span style="font-size:10px;color:var(--subtext)">${escHtml(groups)}</span>` : ''}</td>
+      <td class="td-level" style="color:${sevColor(a.severity)}">${a.rule_level}</td>
+      <td style="font-size:11px;color:var(--subtext);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(a.location || '—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+async function openAlert(alertId) {
+  selectedAlertId = alertId;
+  // Re-render to update selected row
+  document.querySelectorAll('#alert-tbody tr').forEach(tr => {
+    tr.classList.toggle('selected', tr.onclick && tr.getAttribute('onclick').includes(alertId));
+  });
+
+  document.getElementById('detail-panel').classList.add('open');
+  document.getElementById('panel-title').textContent = 'Loading…';
+  document.getElementById('panel-body').innerHTML = `<div style="text-align:center;padding:40px"><span class="spinner"></span></div>`;
+
+  try {
+    const r = await fetch('/wazuh/api/alert/' + encodeURIComponent(alertId));
+    if (!r.ok) { document.getElementById('panel-body').innerHTML = `<p style="color:var(--red)">Alert not found</p>`; return; }
+    const a = await r.json();
+    renderPanel(a);
+  } catch {
+    document.getElementById('panel-body').innerHTML = `<p style="color:var(--red)">Failed to load alert</p>`;
+  }
+}
+
+function renderPanel(a) {
+  document.getElementById('panel-title').innerHTML = `${sevBadge(a.severity)} Alert Detail`;
+
+  let groups = [];
+  try { groups = JSON.parse(a.groups || '[]'); } catch { /* */ }
+
+  let fullAlert = {};
+  try { fullAlert = JSON.parse(a.full_alert || '{}'); } catch { /* */ }
+
+  const recommended = getRecommendations(a);
+
+  document.getElementById('panel-body').innerHTML = `
+    <div class="detail-section">
+      <h4>Alert Info</h4>
+      <div class="detail-row"><span class="dk">Alert ID</span><span class="dv" style="font-family:monospace;font-size:11px">${escHtml(a.alert_id)}</span></div>
+      <div class="detail-row"><span class="dk">Timestamp</span><span class="dv">${escHtml(a.timestamp)}</span></div>
+      <div class="detail-row"><span class="dk">Rule Level</span><span class="dv" style="color:${sevColor(a.severity)};font-weight:600">${a.rule_level}</span></div>
+      <div class="detail-row"><span class="dk">Rule ID</span><span class="dv" style="font-family:monospace">${escHtml(a.rule_id || '—')}</span></div>
+      <div class="detail-row"><span class="dk">Description</span><span class="dv">${escHtml(a.rule_description)}</span></div>
+      ${groups.length ? `<div class="detail-row"><span class="dk">Groups</span><span class="dv">${groups.map(g => `<code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:11px;margin-right:4px">${escHtml(g)}</code>`).join('')}</span></div>` : ''}
+    </div>
+
+    <div class="detail-section">
+      <h4>Agent</h4>
+      <div class="detail-row"><span class="dk">Name</span><span class="dv" style="font-family:monospace">${escHtml(a.agent_name)}</span></div>
+      <div class="detail-row"><span class="dk">IP</span><span class="dv" style="font-family:monospace">${escHtml(a.agent_ip || '—')}</span></div>
+      <div class="detail-row"><span class="dk">Location</span><span class="dv">${escHtml(a.location || '—')}</span></div>
+    </div>
+
+    <div class="detail-section">
+      <h4>Analysis</h4>
+      <div class="llm-hint">${escHtml(buildHint(a, groups))}</div>
+    </div>
+
+    ${recommended.length ? `
+    <div class="detail-section">
+      <h4>Recommended Actions</h4>
+      <ul class="action-list">${recommended.map(r => `<li>${escHtml(r)}</li>`).join('')}</ul>
+    </div>` : ''}
+
+    <div class="detail-section">
+      <h4>Raw Alert</h4>
+      <span class="raw-toggle" onclick="toggleRaw(this)">Show raw JSON ▾</span>
+      <pre class="raw-json" id="raw-json-block">${escHtml(JSON.stringify(fullAlert, null, 2))}</pre>
+    </div>
+  `;
+}
+
+function buildHint(a, groups) {
+  const sev = (a.severity || '').toUpperCase();
+  const cat = classifyCategory(a, groups);
+  return `This is a ${sev} severity ${cat} alert from agent "${a.agent_name}" (${a.agent_ip || 'unknown IP'}). Rule: "${a.rule_description}" (level ${a.rule_level}).`;
+}
+
+function classifyCategory(a, groups) {
+  const g = groups.map(x => x.toLowerCase());
+  if (g.some(x => ['attack','intrusion','exploit','malware','virus','trojan','injection','brute_force'].includes(x))) return 'threat detection';
+  if (g.some(x => ['authentication','ssh','login','pam','sudo','su'].includes(x))) return 'authentication';
+  if (g.some(x => ['syscheck','rootcheck','fim'].includes(x))) return 'file integrity';
+  if (g.some(x => ['firewall','network','iptables','scan'].includes(x))) return 'network activity';
+  if (a.rule_level >= 12) return 'high severity event';
+  return 'informational';
+}
+
+function getRecommendations(a) {
+  let groups = [];
+  try { groups = JSON.parse(a.groups || '[]').map(g => g.toLowerCase()); } catch { /* */ }
+  const sev = a.severity;
+  const level = a.rule_level;
+  const rec = [];
+
+  if (sev === 'critical') {
+    rec.push('Isolate affected agent immediately');
+    rec.push('Take forensic snapshot of the instance');
+    rec.push('Escalate to security team');
+  } else if (sev === 'high') {
+    rec.push('Investigate agent for lateral movement indicators');
+    rec.push('Review authentication logs on the affected host');
+  } else if (sev === 'medium') {
+    rec.push('Correlate with other recent alerts from the same agent');
+    rec.push('Review relevant application/service logs');
+  } else {
+    rec.push('Add to watchlist for pattern analysis');
+  }
+  if (groups.some(g => ['syscheck','rootcheck','fim'].includes(g)))
+    rec.push('Review recently modified files on the agent');
+  if (groups.some(g => ['authentication','ssh','login','pam','sudo','su'].includes(g)))
+    rec.push('Check for repeated auth failures from the same source IP');
+  if (groups.some(g => ['attack','intrusion','exploit','malware'].includes(g)))
+    rec.push('Cross-reference with threat intelligence feeds');
+  return rec;
+}
+
+function toggleRaw(el) {
+  const block = document.getElementById('raw-json-block');
+  block.classList.toggle('visible');
+  el.textContent = block.classList.contains('visible') ? 'Hide raw JSON ▴' : 'Show raw JSON ▾';
+}
+
+function closePanel() {
+  document.getElementById('detail-panel').classList.remove('open');
+  selectedAlertId = null;
+  document.querySelectorAll('#alert-tbody tr.selected').forEach(tr => tr.classList.remove('selected'));
+}
+
+// ── Poll Wazuh API ────────────────────────────────────────────────────────────
+async function fetchFromWazuh() {
+  const btn = document.getElementById('btn-fetch');
+  btn.disabled = true;
+  btn.textContent = '↓ Polling…';
+  try {
+    const r = await fetch('/wazuh/api/fetch', { method: 'POST', body: JSON.stringify({ limit: 50, min_level: 1 }) });
+    const d = await r.json();
+    if (r.ok) {
+      toast(`Fetched ${d.fetched ?? 0} entries, stored ${d.stored ?? 0} new`);
+      loadStats();
+      loadAlerts();
+    } else {
+      toast(d.error || 'Fetch failed', 'error');
+    }
+  } catch {
+    toast('Could not reach Wazuh API', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↓ Poll Wazuh API';
+  }
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+let autoTimer = null;
+function toggleAuto() {
+  clearInterval(autoTimer);
+  if (document.getElementById('auto-refresh').checked) {
+    autoTimer = setInterval(() => { loadStats(); loadAlerts(); }, 30_000);
+  }
+}
+
+// ── Debounce for agent filter ─────────────────────────────────────────────────
+let debTimer = null;
+function debounceLoad() { clearTimeout(debTimer); debTimer = setTimeout(loadAlerts, 400); }
+
+// ── Escape helpers ────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) { return escHtml(s).replace(/'/g,'&#39;'); }
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+function init() {
+  loadStats();
+  loadAlerts();
+}
+
+// Auto-login if key already in storage
+window.addEventListener('DOMContentLoaded', () => {
+  if (getKey()) { showApp(); } else { document.getElementById('login-screen').classList.remove('hidden'); }
+});
+</script>
+</body>
+</html>

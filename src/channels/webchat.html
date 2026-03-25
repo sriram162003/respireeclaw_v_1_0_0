@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>__AGENT_NAME__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ── Reset & Variables ──────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b14;--surface:#111120;--surface2:#18192a;--surface3:#1f2038;
+  --border:#262740;--border2:#32345a;
+  --accent:#7c6af5;--accent-glow:rgba(124,106,245,.25);--accent-dim:#342e6a;
+  --teal:#00d4aa;--teal-dim:rgba(0,212,170,.15);
+  --red:#ff5566;--red-dim:rgba(255,85,102,.12);
+  --text:#e0e0f4;--text-dim:#8888aa;--text-faint:#44446a;
+  --user-bg:#162044;--user-border:#243060;--agent-bg:#141425;
+  --code-bg:#0c0c18;
+  --radius:14px;--radius-sm:8px;
+  --font:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono','Fira Code',monospace;
+  --nav-w:64px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── App shell ──────────────────────────────────────────────────── */
+#app{display:grid;grid-template-columns:var(--nav-w) 1fr;grid-template-rows:auto auto 1fr;height:100vh;overflow:hidden}
+
+/* ── Login overlay ──────────────────────────────────────────────── */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999}
+#login-screen.hidden{display:none}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px 48px;width:100%;max-width:420px;text-align:center}
+.login-logo{font-size:28px;font-weight:700;color:var(--accent);margin-bottom:4px;letter-spacing:-.5px}
+.login-logo span{background:linear-gradient(135deg,var(--accent),#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.login-sub{font-size:13px;color:var(--text-dim);margin-bottom:28px}
+.login-box label{display:block;text-align:left;font-size:12px;color:var(--text-dim);margin-bottom:6px;font-weight:500}
+.login-box input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:var(--radius-sm);font-size:14px;font-family:var(--mono);margin-bottom:14px;outline:none;transition:border-color .15s}
+.login-box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.login-btn{width:100%;background:var(--accent);color:#fff;border:none;padding:12px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+.login-btn:hover{background:#9580ff}
+.login-err{color:var(--red);font-size:12px;min-height:18px;margin-bottom:10px}
+.login-hint{font-size:11px;color:var(--text-faint);margin-top:14px}
+.login-hint code{background:var(--surface2);padding:2px 6px;border-radius:4px;font-family:var(--mono)}
+
+/* ── Nav sidebar ────────────────────────────────────────────────── */
+#nav{
+  grid-row:1/-1;display:flex;flex-direction:column;align-items:center;
+  padding:14px 0 12px;gap:2px;
+  background:var(--surface);border-right:1px solid var(--border);
+  z-index:20;overflow:hidden;
+}
+.nav-logo{
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),#a855f7);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;margin-bottom:14px;
+  box-shadow:0 0 16px var(--accent-glow);flex-shrink:0;
+}
+.nav-item{
+  width:52px;height:52px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px;
+  border-radius:var(--radius-sm);border:1px solid transparent;
+  cursor:pointer;transition:all .18s;
+  color:var(--text-faint);font-size:10px;font-weight:500;letter-spacing:.01em;
+  user-select:none;
+}
+.nav-item svg{width:18px;height:18px;flex-shrink:0}
+.nav-item:hover{background:var(--surface2);color:var(--text-dim);border-color:var(--border)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);border-color:rgba(124,106,245,.3)}
+.nav-spacer{flex:1}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+#header{
+  grid-column:2;display:flex;align-items:center;gap:10px;
+  padding:11px 18px;background:var(--surface);border-bottom:1px solid var(--border);
+  flex-shrink:0;z-index:10;
+}
+#agent-avatar{
+  width:36px;height:36px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#a855f7);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:14px;color:#fff;flex-shrink:0;
+  box-shadow:0 0 14px var(--accent-glow);
+}
+#agent-name-hdr{font-weight:600;font-size:15px}
+#status-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:99px;font-size:12px;font-weight:500;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text-dim);transition:all .3s;
+}
+#status-dot{width:7px;height:7px;border-radius:50%;background:var(--text-faint);transition:all .3s}
+#status-badge.connected{border-color:rgba(0,212,170,.3);color:var(--teal)}
+#status-badge.connected #status-dot{background:var(--teal);box-shadow:0 0 8px var(--teal)}
+#status-badge.disconnected{border-color:rgba(255,85,102,.3);color:var(--red)}
+#status-badge.disconnected #status-dot{background:var(--red)}
+.hdr-space{flex:1}
+.hdr-pill{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 10px;
+  border-radius:99px;font-size:12px;font-weight:500;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);
+}
+.hdr-btn{
+  display:flex;align-items:center;gap:5px;padding:6px 12px;
+  border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-dim);font-size:12px;
+  font-family:var(--font);cursor:pointer;transition:all .18s;white-space:nowrap;
+}
+.hdr-btn svg{width:13px;height:13px;flex-shrink:0}
+.hdr-btn:hover{background:var(--surface3);color:var(--text);border-color:var(--border2)}
+
+/* ── Reconnect banner ───────────────────────────────────────────── */
+#banner{
+  grid-column:2;display:none;align-items:center;justify-content:center;gap:8px;
+  padding:7px;font-size:12px;color:var(--red);
+  background:var(--red-dim);border-bottom:1px solid rgba(255,85,102,.2);
+}
+#banner.show{display:flex}
+
+/* ── Content area ───────────────────────────────────────────────── */
+#content{grid-column:2;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+/* ── Panel base ─────────────────────────────────────────────────── */
+.panel{display:none;flex:1;flex-direction:column;overflow:hidden;animation:fadeIn .18s ease}
+.panel.active{display:flex}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.panel-hdr{padding:18px 22px 0;flex-shrink:0}
+.panel-title{font-size:17px;font-weight:600;margin-bottom:3px}
+.panel-sub{font-size:13px;color:var(--text-dim);margin-bottom:16px}
+.panel-body{flex:1;overflow-y:auto;padding:0 22px 22px}
+.panel-body::-webkit-scrollbar{width:5px}
+.panel-body::-webkit-scrollbar-track{background:transparent}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.error-state{
+  display:flex;align-items:center;gap:8px;padding:11px 14px;
+  border-radius:var(--radius-sm);background:var(--red-dim);
+  border:1px solid rgba(255,85,102,.2);color:var(--red);font-size:13px;margin:10px 0;
+}
+.empty-state{text-align:center;padding:44px 20px;color:var(--text-dim);font-size:14px;line-height:1.8}
+.empty-icon{font-size:34px;margin-bottom:10px}
+
+/* ── Chat panel ─────────────────────────────────────────────────── */
+#panel-chat{overflow:hidden}
+#chat-main{display:flex;flex:1;overflow:hidden}
+#chat-col{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden}
+
+#msgs{flex:1;overflow-y:auto;padding:20px 18px 10px;display:flex;flex-direction:column;gap:5px}
+#msgs::-webkit-scrollbar{width:5px}
+#msgs::-webkit-scrollbar-track{background:transparent}
+#msgs::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+#welcome{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;text-align:center;padding:60px 20px;color:var(--text-dim);font-size:14px;flex:1;
+}
+.welcome-icon{
+  width:60px;height:60px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#a855f7);
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;box-shadow:0 0 28px var(--accent-glow);
+}
+#welcome h2{font-size:21px;font-weight:600;color:var(--text)}
+#welcome p{max-width:280px;color:var(--text-dim);line-height:1.7}
+
+.group{display:flex;flex-direction:column;gap:2px;max-width:78%;animation:fadeUp .2s ease}
+.group.user{align-self:flex-end;align-items:flex-end}
+.group.agent{align-self:flex-start;align-items:flex-start}
+
+.msg-row{display:flex;align-items:flex-end;gap:8px}
+.group.user .msg-row{flex-direction:row-reverse}
+
+.av{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.av.agent{background:linear-gradient(135deg,var(--accent),#a855f7);color:#fff}
+.av.user{background:rgba(0,212,170,.15);color:var(--teal);border:1px solid rgba(0,212,170,.2)}
+.av.blank{visibility:hidden}
+
+.bubble{
+  padding:9px 13px;border-radius:17px;font-size:14px;line-height:1.65;
+  word-break:break-word;position:relative;
+}
+.group.agent .bubble{background:var(--agent-bg);border:1px solid var(--border);border-bottom-left-radius:4px}
+.group.user  .bubble{background:var(--user-bg);border:1px solid var(--user-border);border-bottom-right-radius:4px}
+.group.agent .msg-row:first-child .bubble{border-top-left-radius:17px}
+.group.user  .msg-row:first-child .bubble{border-top-right-radius:17px}
+
+.bubble p{margin:0 0 7px}.bubble p:last-child{margin-bottom:0}
+.bubble h1{font-size:1.15em;font-weight:600;margin:11px 0 5px}
+.bubble h2{font-size:1.05em;font-weight:600;margin:9px 0 4px}
+.bubble h3{font-size:1em;font-weight:600;margin:7px 0 3px}
+.bubble ul,.bubble ol{padding-left:18px;margin:5px 0}
+.bubble li{margin:2px 0}
+.bubble strong{font-weight:600;color:#fff}
+.bubble em{color:var(--text-dim);font-style:italic}
+.bubble a{color:var(--accent);text-decoration:none}
+.bubble a:hover{text-decoration:underline}
+.bubble blockquote{border-left:3px solid var(--accent);padding-left:11px;margin:7px 0;color:var(--text-dim)}
+.bubble hr{border:none;border-top:1px solid var(--border);margin:9px 0}
+.bubble :not(pre)>code{background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:var(--mono);font-size:.84em;color:#e2c083}
+.bubble table{border-collapse:collapse;width:100%;font-size:13px;margin:7px 0}
+.bubble th,.bubble td{border:1px solid var(--border);padding:6px 9px}
+.bubble th{background:var(--surface2);font-weight:600}
+.bubble tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+
+.code-wrap{margin:5px 0;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);background:var(--code-bg)}
+.code-hdr{display:flex;align-items:center;justify-content:space-between;padding:5px 11px;background:#0e0e1c;border-bottom:1px solid var(--border)}
+.code-lang{font-size:10px;font-family:var(--mono);color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em}
+.copy-btn{font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;font-family:var(--font);transition:all .15s}
+.copy-btn:hover{background:var(--surface2);color:var(--text)}
+.copy-btn.copied{color:var(--teal);border-color:rgba(0,212,170,.3)}
+.bubble pre{margin:0;padding:10px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;background:transparent!important}
+.bubble pre::-webkit-scrollbar{height:4px}
+.bubble pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.msg-ts{font-size:11px;color:var(--text-faint);padding:2px 4px;margin-top:2px}
+
+/* Attachment display */
+.att-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.att-photo img{max-width:260px;max-height:200px;border-radius:var(--radius-sm);display:block;cursor:pointer;border:1px solid var(--border)}
+.att-doc{display:inline-flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 11px;font-size:12px;color:var(--text);text-decoration:none;max-width:260px}
+.att-doc:hover{border-color:var(--accent);color:var(--accent)}
+.att-audio audio,.att-video video{max-width:260px;width:100%;border-radius:var(--radius-sm);display:block}
+.att-caption{font-size:11px;color:var(--text-dim);margin-top:3px}
+
+/* Typing indicator */
+#typing{display:none;align-items:flex-end;gap:8px;padding:4px 18px 10px;animation:fadeUp .2s}
+#typing.show{display:flex}
+.dots-bubble{display:flex;align-items:center;gap:4px;padding:9px 13px;background:var(--agent-bg);border:1px solid var(--border);border-radius:17px;border-bottom-left-radius:4px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--text-faint);animation:bounce 1.2s infinite ease-in-out}
+.dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+.sys-msg{align-self:center;font-size:11px;color:var(--text-faint);padding:3px 11px;background:var(--surface);border:1px solid var(--border);border-radius:99px;margin:2px 0}
+
+/* Input area */
+#input-area{padding:12px 18px 16px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+#attach-preview{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+#attach-preview:empty{display:none}
+.preview-item{position:relative;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);background:var(--surface2);flex-shrink:0}
+.preview-item img{width:56px;height:56px;object-fit:cover;display:block}
+.preview-chip{display:flex;align-items:center;gap:5px;padding:6px 9px;font-size:11px;color:var(--text-dim);max-width:170px}
+.preview-chip .chip-icon{font-size:15px;flex-shrink:0}
+.preview-chip .chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preview-remove{position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#00000099;color:#fff;border:none;cursor:pointer;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1}
+.preview-remove:hover{background:var(--red)}
+
+#input-wrap{
+  display:flex;align-items:flex-end;gap:8px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:15px;padding:8px 10px;transition:border-color .2s;
+}
+#input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+#input{
+  flex:1;background:none;border:none;outline:none;color:var(--text);
+  font-family:var(--font);font-size:14px;line-height:1.5;
+  resize:none;min-height:22px;max-height:140px;overflow-y:auto;
+}
+#input::placeholder{color:var(--text-faint)}
+#input::-webkit-scrollbar{width:4px}
+#input::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.btn-attach{
+  width:32px;height:32px;border-radius:9px;border:1px solid var(--border);
+  background:var(--surface3);color:var(--text-dim);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;
+}
+.btn-attach:hover{background:var(--surface2);border-color:var(--border2);color:var(--text)}
+.btn-attach:disabled{opacity:.4;cursor:not-allowed}
+.btn-attach svg{width:15px;height:15px}
+#send{
+  width:34px;height:34px;border-radius:9px;border:none;
+  background:var(--accent);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;
+}
+#send:hover{background:#9580ff;transform:scale(1.05)}
+#send:active{transform:scale(.94)}
+#send:disabled{background:var(--surface3);cursor:not-allowed;transform:none}
+#send svg{width:15px;height:15px}
+#input-hint{font-size:11px;color:var(--text-faint);text-align:center;margin-top:5px}
+
+/* ── Skills panel ───────────────────────────────────────────────── */
+.skill-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:4px}
+.skill-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px;display:flex;flex-direction:column;gap:9px;
+  transition:border-color .2s;animation:fadeUp .2s ease;
+}
+.skill-card:hover{border-color:var(--border2)}
+.skill-card.enabled-card{border-color:rgba(124,106,245,.25)}
+.skill-card-top{display:flex;align-items:flex-start;gap:10px}
+.skill-icon{
+  width:34px;height:34px;border-radius:8px;background:var(--accent-dim);
+  border:1px solid rgba(124,106,245,.2);display:flex;align-items:center;
+  justify-content:center;font-size:15px;flex-shrink:0;
+}
+.skill-info{flex:1;min-width:0}
+.skill-name-text{font-size:13px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.skill-file{font-size:11px;color:var(--text-faint);font-family:var(--mono)}
+.skill-desc{font-size:12px;color:var(--text-dim);line-height:1.6}
+.skill-footer{display:flex;align-items:center;justify-content:space-between}
+.skill-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;letter-spacing:.04em}
+.skill-badge.on{background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,212,170,.2)}
+.skill-badge.off{background:var(--surface3);color:var(--text-faint);border:1px solid var(--border)}
+
+/* Toggle switch */
+.toggle-wrap{display:flex;align-items:center;gap:6px;cursor:pointer}
+.toggle{position:relative;width:34px;height:19px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-track{position:absolute;inset:0;background:var(--surface3);border:1px solid var(--border);border-radius:99px;transition:all .2s;cursor:pointer}
+.toggle-thumb{position:absolute;left:3px;top:3px;width:11px;height:11px;border-radius:50%;background:var(--text-faint);transition:all .2s}
+.toggle input:checked~.toggle-track{background:var(--accent-dim);border-color:var(--accent)}
+.toggle input:checked~.toggle-thumb{background:var(--accent);transform:translateX(15px)}
+
+/* ── Status panel ───────────────────────────────────────────────── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:4px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;animation:fadeUp .2s ease}
+.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);margin-bottom:7px}
+.stat-value{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1}
+.stat-value.accent{color:var(--accent)}
+.stat-value.teal{color:var(--teal)}
+
+.section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:10px}
+
+/* Heartbeat */
+.hb-actions{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.hb-btn{
+  padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-size:12px;font-family:var(--font);
+  cursor:pointer;transition:all .18s;font-weight:500;
+}
+.hb-btn:hover{background:var(--surface3);border-color:var(--accent);color:var(--accent)}
+.hb-btn:disabled{opacity:.5;cursor:default}
+.hb-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.hb-table{width:100%;border-collapse:collapse;font-size:12px}
+.hb-table th{padding:8px 13px;text-align:left;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border)}
+.hb-table td{padding:9px 13px;border-bottom:1px solid var(--border)}
+.hb-table tr:last-child td{border-bottom:none}
+.hb-result-ok{color:var(--teal);font-weight:500}
+.hb-result-err{color:var(--red);font-weight:500}
+
+/* Pulse */
+.pulse-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.pulse-dot{width:10px;height:10px;border-radius:50%;background:var(--text-faint);flex-shrink:0;transition:background .3s}
+.pulse-dot.alive{background:var(--teal);box-shadow:0 0 6px rgba(0,212,170,.5);animation:pulse-beat 2s infinite}
+.pulse-dot.stale{background:#f0a500}
+.pulse-dot.dead{background:var(--red)}
+@keyframes pulse-beat{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse-meta{font-size:12px;color:var(--text-faint)}
+.pulse-meta span{color:var(--text-dim)}
+.pulse-monitors{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;margin-bottom:16px}
+.pulse-monitor-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px}
+.pulse-monitor-name{font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px}
+.pulse-monitor-stat{font-size:11px;color:var(--text-faint);line-height:1.7}
+.pulse-monitor-stat .val{color:var(--text-dim)}
+.pulse-monitor-alert{font-size:11px;color:var(--red);margin-top:3px}
+.pulse-alerts-list{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+.pulse-alert-row{display:flex;gap:9px;align-items:flex-start;padding:9px 13px;border-bottom:1px solid var(--border);font-size:12px}
+.pulse-alert-row:last-child{border-bottom:none}
+.pulse-alert-ts{color:var(--text-faint);white-space:nowrap;flex-shrink:0}
+.pulse-alert-monitor{color:var(--accent);font-weight:600;flex-shrink:0;min-width:85px}
+.pulse-alert-text{color:var(--text-dim);flex:1}
+.pulse-empty{text-align:center;color:var(--text-faint);padding:18px;font-size:12px}
+
+/* ── Usage panel ─────────────────────────────────────────────────── */
+.usage-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:4px}
+.usage-table{width:100%;border-collapse:collapse;font-size:12px}
+.usage-table th{padding:8px 13px;text-align:left;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border)}
+.usage-table td{padding:9px 13px;border-bottom:1px solid var(--border);vertical-align:middle}
+.usage-table tr:last-child td{border-bottom:none}
+.usage-table tr:hover td{background:rgba(255,255,255,.01)}
+.tok-in{color:var(--accent);font-variant-numeric:tabular-nums}
+.tok-out{color:var(--teal);font-variant-numeric:tabular-nums}
+.tok-model{font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+
+/* ── Mobile ──────────────────────────────────────────────────────── */
+@media(max-width:680px){
+  #app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}
+  #nav{
+    grid-row:4;flex-direction:row;justify-content:space-around;
+    padding:6px 0 max(6px,env(safe-area-inset-bottom));
+    border-right:none;border-top:1px solid var(--border);
+    position:fixed;bottom:0;left:0;right:0;z-index:100;height:auto;
+  }
+  .nav-logo{display:none}.nav-spacer{display:none}
+  .nav-item{width:54px;height:46px}
+  #header{grid-column:1}
+  #banner{grid-column:1}
+  #content{grid-column:1;padding-bottom:58px}
+  .group{max-width:90%}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Login ─────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"><span>__AGENT_NAME__</span></div>
+    <div class="login-sub">Enter your API key to connect</div>
+    <label>API Key</label>
+    <input type="password" id="key-input" placeholder="sk-aura-…" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()"/>
+    <div class="login-err" id="login-err"></div>
+    <button class="login-btn" onclick="doLogin()">Connect</button>
+    <div class="login-hint">Find your key: <code>cat /root/.aura/keys.yaml</code></div>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- ── Nav sidebar ───────────────────────────────────────────── -->
+  <nav id="nav">
+    <div class="nav-logo">✦</div>
+
+    <div class="nav-item active" data-panel="chat" onclick="showPanel('chat')" title="Chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      Chat
+    </div>
+
+    <div class="nav-item" data-panel="skills" onclick="showPanel('skills')" title="Skills">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      Skills
+    </div>
+
+    <div class="nav-item" data-panel="status" onclick="showPanel('status')" title="Status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      Status
+    </div>
+
+    <div class="nav-item" data-panel="usage" onclick="showPanel('usage')" title="Token Usage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      Usage
+    </div>
+
+    <div class="nav-spacer"></div>
+  </nav>
+
+  <!-- ── Header ────────────────────────────────────────────────── -->
+  <header id="header">
+    <div id="agent-avatar">A</div>
+    <span id="agent-name-hdr">__AGENT_NAME__</span>
+    <div id="status-badge">
+      <div id="status-dot"></div>
+      <span id="status-text">Connecting…</span>
+    </div>
+    <div class="hdr-space"></div>
+    <a href="/dashboard" class="hdr-btn" style="text-decoration:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Dashboard
+    </a>
+    <button class="hdr-btn" onclick="signOut()">Sign out</button>
+  </header>
+
+  <!-- ── Reconnect banner ──────────────────────────────────────── -->
+  <div id="banner">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/>
+    </svg>
+    Disconnected — reconnecting…
+  </div>
+
+  <!-- ── Content ───────────────────────────────────────────────── -->
+  <div id="content">
+
+    <!-- ── Chat ──────────────────────────────────────────────── -->
+    <div id="panel-chat" class="panel active">
+      <div id="chat-main">
+        <div id="chat-col">
+          <div id="msgs">
+            <div id="welcome">
+              <div class="welcome-icon">✦</div>
+              <h2 id="welcome-h">Hi, I'm __AGENT_NAME__</h2>
+              <p>Your personal AI assistant — ask me anything or give me a task to run.</p>
+            </div>
+          </div>
+          <div id="typing">
+            <div class="av agent" id="typing-av">A</div>
+            <div class="dots-bubble">
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            </div>
+          </div>
+          <div id="input-area">
+            <div id="attach-preview"></div>
+            <div id="input-wrap">
+              <button class="btn-attach" id="attach-btn" onclick="openFilePicker()" title="Attach file" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                </svg>
+              </button>
+              <input type="file" id="file-input" multiple style="display:none" onchange="onFilesSelected(this.files)"/>
+              <textarea id="input" rows="1" placeholder="Message…" autocomplete="off" spellcheck="true" disabled></textarea>
+              <button id="send" onclick="sendMsg()" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+                </svg>
+              </button>
+            </div>
+            <div id="input-hint">Enter to send · Shift+Enter for new line · 📎 Attach files</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Skills ─────────────────────────────────────────────── -->
+    <div id="panel-skills" class="panel">
+      <div class="panel-hdr">
+        <div class="panel-title">Skills</div>
+        <div class="panel-sub">Loaded from ~/.aura/skills/ — toggle to enable or disable</div>
+      </div>
+      <div class="panel-body">
+        <div id="skills-error" class="error-state" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+          <span id="skills-error-msg">Failed to load skills</span>
+        </div>
+        <div id="skills-grid" class="skill-grid">
+          <div class="empty-state"><div class="empty-icon">⚡</div>Loading skills…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Status ─────────────────────────────────────────────── -->
+    <div id="panel-status" class="panel">
+      <div class="panel-hdr">
+        <div class="panel-title">System Status</div>
+        <div class="panel-sub">Gateway health, heartbeat log and pulse monitor</div>
+      </div>
+      <div class="panel-body">
+        <div id="status-error" class="error-state" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+          <span id="status-error-msg">Failed to load status</span>
+        </div>
+
+        <div class="stat-grid" id="stat-grid">
+          <div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value accent" id="stat-uptime">—</div></div>
+          <div class="stat-card"><div class="stat-label">Version</div><div class="stat-value" id="stat-version">—</div></div>
+          <div class="stat-card"><div class="stat-label">Nodes</div><div class="stat-value teal" id="stat-nodes">—</div></div>
+          <div class="stat-card"><div class="stat-label">Agents</div><div class="stat-value" id="stat-agents">—</div></div>
+          <div class="stat-card"><div class="stat-label">Skills</div><div class="stat-value" id="stat-skills">—</div></div>
+        </div>
+
+        <div class="section-title">Heartbeat Log</div>
+        <div class="hb-actions">
+          <button class="hb-btn" id="hb-trigger-btn" onclick="triggerHeartbeat()">▶ Trigger Heartbeat</button>
+        </div>
+        <div class="hb-table-wrap">
+          <table class="hb-table">
+            <thead><tr><th>Timestamp</th><th>Result</th><th>Duration</th></tr></thead>
+            <tbody id="hb-tbody"><tr><td colspan="3" style="text-align:center;color:var(--text-faint);padding:18px">No heartbeat data yet</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="section-title" style="margin-top:22px">Pulse Monitor</div>
+        <div class="pulse-header">
+          <div class="pulse-dot" id="pulse-dot"></div>
+          <div class="pulse-meta" id="pulse-meta">Not loaded</div>
+        </div>
+        <div class="pulse-monitors" id="pulse-monitors"></div>
+
+        <div class="section-title">Recent Pulse Alerts</div>
+        <div class="pulse-alerts-list" id="pulse-alerts-list">
+          <div class="pulse-empty">No pulse alerts yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Usage ──────────────────────────────────────────────── -->
+    <div id="panel-usage" class="panel">
+      <div class="panel-hdr">
+        <div class="panel-title">Token Usage</div>
+        <div class="panel-sub">Cumulative LLM token consumption since gateway start</div>
+      </div>
+      <div class="panel-body">
+        <div id="usage-error" class="error-state" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+          <span id="usage-error-msg">Failed to load usage</span>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-label">Total Input</div><div class="stat-value accent" id="stat-tok-in">—</div></div>
+          <div class="stat-card"><div class="stat-label">Total Output</div><div class="stat-value teal" id="stat-tok-out">—</div></div>
+          <div class="stat-card"><div class="stat-label">Total Tokens</div><div class="stat-value" id="stat-tok-total">—</div></div>
+          <div class="stat-card"><div class="stat-label">LLM Calls</div><div class="stat-value" id="stat-tok-calls">—</div></div>
+        </div>
+        <div class="section-title">Recent LLM Calls</div>
+        <div class="usage-table-wrap">
+          <table class="usage-table">
+            <thead><tr><th>Time</th><th>Tier</th><th>Model</th><th>In</th><th>Out</th></tr></thead>
+            <tbody id="usage-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px">No calls yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- #content -->
+</div><!-- #app -->
+
+<script>
+const AGENT = '__AGENT_NAME__';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmtUptime(s){
+  s=Math.floor(s);
+  const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sc=s%60;
+  if(d>0)return`${d}d ${h}h`;if(h>0)return`${h}h ${m}m`;if(m>0)return`${m}m ${sc}s`;return`${sc}s`;
+}
+function fmtTok(n){if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return String(n)}
+function getKey(){return localStorage.getItem('aura_api_key')||''}
+function saveKey(k){localStorage.setItem('aura_api_key',k)}
+function clearKey(){localStorage.removeItem('aura_api_key')}
+
+async function api(path,method='GET',body=null){
+  const key=getKey();
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(key)opts.headers['Authorization']='Bearer '+key;
+  if(body!==null)opts.body=JSON.stringify(body);
+  const r=await fetch(path,opts);
+  if(!r.ok)throw new Error(`HTTP ${r.status}`);
+  if(r.status===204)return null;
+  return r.json();
+}
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+async function doLogin(){
+  const key=document.getElementById('key-input').value.trim();
+  const err=document.getElementById('login-err');
+  if(!key){err.textContent='Please enter your API key.';return}
+  err.textContent='Verifying…';
+  try{
+    const res=await fetch('/api/health',{headers:{'Authorization':'Bearer '+key}});
+    if(res.status===401){err.textContent='Invalid API key — try again.';return}
+    saveKey(key);
+    document.getElementById('login-screen').classList.add('hidden');
+    boot();
+  }catch{err.textContent='Cannot reach gateway.'}
+}
+function signOut(){clearKey();location.reload()}
+
+// ── Branding ───────────────────────────────────────────────────────────────
+function setBranding(name){
+  const init=name.charAt(0).toUpperCase();
+  document.getElementById('agent-avatar').textContent=init;
+  document.getElementById('agent-name-hdr').textContent=name;
+  document.getElementById('typing-av').textContent=init;
+  const wh=document.getElementById('welcome-h');
+  if(wh)wh.textContent=`Hi, I'm ${name}`;
+  document.title=name;
+  agentInit=init;
+}
+let agentInit=(AGENT||'A').charAt(0).toUpperCase();
+
+// ── Panel routing ──────────────────────────────────────────────────────────
+let currentPanel='chat';
+let panelTimer=null;
+
+const PANEL_LOADERS={
+  skills:loadSkills,
+  status:loadStatus,
+  usage:loadUsage,
+};
+
+function showPanel(name){
+  if(panelTimer){clearInterval(panelTimer);panelTimer=null}
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.panel===name));
+  const p=document.getElementById('panel-'+name);
+  if(p)p.classList.add('active');
+  currentPanel=name;
+  if(PANEL_LOADERS[name]){
+    PANEL_LOADERS[name]();
+    panelTimer=setInterval(PANEL_LOADERS[name],15000);
+  }
+}
+
+// ── Status badge ───────────────────────────────────────────────────────────
+function setStatus(s){
+  const badge=document.getElementById('status-badge');
+  const txt=document.getElementById('status-text');
+  badge.className=s;
+  if(s==='connected'){txt.textContent='Connected';document.getElementById('banner').classList.remove('show')}
+  else if(s==='disconnected'){txt.textContent='Disconnected';document.getElementById('banner').classList.add('show')}
+  else{txt.textContent='Connecting…'}
+  document.getElementById('send').disabled=s!=='connected';
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+let ws,reconnectTimer,failCount=0;
+
+function connect(){
+  const key=getKey();
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  const url=`${proto}//${location.host}/ws${key?'?token='+encodeURIComponent(key):''}`;
+  ws=new WebSocket(url);
+
+  ws.onopen=()=>{failCount=0;setStatus('connected')};
+
+  ws.onmessage=(e)=>{
+    try{
+      const msg=JSON.parse(e.data);
+      if(msg.type==='connected'){
+        hideTyping();
+        if(msg.agent_name)setBranding(msg.agent_name);
+        addSysMsg('Connected to '+(msg.agent_name||AGENT));
+        enableInput();
+      }else if(msg.type==='message'){
+        hideTyping();
+        appendMsg('agent',msg.text||'',msg.attachments||[]);
+        enableInput();
+        if(currentPanel==='usage')loadUsage();
+      }
+    }catch{}
+  };
+
+  ws.onclose=(e)=>{
+    if(e.code===4001){clearKey();location.reload();return}
+    failCount++;
+    if(failCount>=3){clearKey();location.reload();return}
+    setStatus('disconnected');
+    reconnectTimer=setTimeout(connect,3000);
+  };
+
+  ws.onerror=()=>{try{ws.close()}catch{}};
+}
+
+// ── Messages ───────────────────────────────────────────────────────────────
+const $msgs=document.getElementById('msgs');
+let lastRole=null,lastGroup=null;
+
+function renderAttachment(att){
+  const name=att.filename||att.url?.split('/').pop()||'file';
+  const cap=att.caption?`<div class="att-caption">${esc(att.caption)}</div>`:'';
+  if(att.type==='photo')return`<div class="att-photo"><img src="${esc(att.url)}" alt="${esc(name)}" onclick="window.open('${esc(att.url)}','_blank')" loading="lazy"/>${cap}</div>`;
+  if(att.type==='audio'||att.type==='voice')return`<div class="att-audio"><audio controls src="${esc(att.url)}"></audio>${cap}</div>`;
+  if(att.type==='video'||att.type==='animation')return`<div class="att-video"><video controls src="${esc(att.url)}"></video>${cap}</div>`;
+  const icon=att.type==='document'?'📄':'📎';
+  return`<div><a class="att-doc" href="${esc(att.url)}" target="_blank" download="${esc(name)}"><span>${icon}</span><span class="att-name">${esc(name)}</span></a>${cap}</div>`;
+}
+
+function appendMsg(role,text,attachments=[]){
+  const welcome=document.getElementById('welcome');
+  if(welcome)welcome.remove();
+
+  const time=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const isNew=lastRole!==role;
+  let group=lastGroup;
+
+  if(isNew){
+    group=document.createElement('div');
+    group.className=`group ${role}`;
+    lastRole=role;lastGroup=group;
+    $msgs.appendChild(group);
+  }
+
+  const row=document.createElement('div');
+  row.className='msg-row';
+
+  const av=document.createElement('div');
+  av.className=isNew?`av ${role}`:'av blank';
+  av.textContent=role==='agent'?agentInit:'U';
+  row.appendChild(av);
+
+  const bubble=document.createElement('div');
+  bubble.className='bubble';
+  const attHtml=attachments.length?`<div class="att-list">${attachments.map(renderAttachment).join('')}</div>`:'';
+  bubble.innerHTML=(text?renderMd(text):'')+attHtml;
+  row.appendChild(bubble);
+  group.appendChild(row);
+
+  let ts=group.querySelector('.msg-ts');
+  if(!ts){ts=document.createElement('div');ts.className='msg-ts';group.appendChild(ts)}
+  ts.textContent=time;
+
+  $msgs.scrollTo({top:$msgs.scrollHeight,behavior:'smooth'});
+}
+
+function addSysMsg(text){
+  const d=document.createElement('div');
+  d.className='sys-msg';d.textContent=text;
+  $msgs.appendChild(d);
+  $msgs.scrollTop=$msgs.scrollHeight;
+}
+
+function showTyping(){
+  document.getElementById('typing').classList.add('show');
+  $msgs.scrollTo({top:$msgs.scrollHeight,behavior:'smooth'});
+}
+function hideTyping(){document.getElementById('typing').classList.remove('show')}
+
+// ── Markdown renderer ──────────────────────────────────────────────────────
+function renderMd(text){
+  text=String(text);
+  // Code blocks
+  text=text.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,lang,code)=>{
+    const l=esc(lang||'text');
+    return`<div class="code-wrap"><div class="code-hdr"><span class="code-lang">${l}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div><pre><code>${esc(code.trim())}</code></pre></div>`;
+  });
+  // Inline code
+  text=text.replace(/`([^`]+)`/g,(_,c)=>`<code>${esc(c)}</code>`);
+  // Bold/italic
+  text=text.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
+  text=text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  text=text.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  // Headers
+  text=text.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  text=text.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  text=text.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  // Lists
+  text=text.replace(/^[\-\*] (.+)$/gm,'<li>$1</li>');
+  text=text.replace(/(<li>.*<\/li>)/s,(m)=>`<ul>${m}</ul>`);
+  // Blockquote
+  text=text.replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>');
+  // HR
+  text=text.replace(/^---$/gm,'<hr/>');
+  // Paragraphs / newlines
+  text=text.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br/>');
+  return`<p>${text}</p>`;
+}
+
+function copyCode(btn){
+  const pre=btn.closest('.code-wrap').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(()=>{
+    btn.textContent='Copied!';btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied')},2000);
+  });
+}
+
+// ── Input / Send ───────────────────────────────────────────────────────────
+function enableInput(){
+  document.getElementById('input').disabled=false;
+  document.getElementById('send').disabled=false;
+  document.getElementById('attach-btn').disabled=false;
+  document.getElementById('input').focus();
+}
+function disableInput(){document.getElementById('send').disabled=true}
+
+document.getElementById('input').addEventListener('keydown',(e)=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg()}
+});
+document.getElementById('input').addEventListener('input',(e)=>{
+  const el=e.target;el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,140)+'px';
+});
+
+function sendMsg(){
+  const inp=document.getElementById('input');
+  const text=inp.value.trim();
+  if(!text&&pendingFiles.length===0)return;
+  if(!ws||ws.readyState!==WebSocket.OPEN)return;
+
+  const previewAtts=pendingFiles.map(f=>
+    f.preview
+      ?{type:'photo',url:f.preview,filename:f.name}
+      :{type:'document',url:'#',filename:f.name}
+  );
+  appendMsg('user',text,previewAtts);
+
+  inp.value='';inp.style.height='';
+  showTyping();disableInput();
+
+  const payload={text:text||''};
+  if(pendingFiles.length)payload.files=pendingFiles.map(f=>({name:f.name,type:f.type,data:f.data}));
+  ws.send(JSON.stringify(payload));
+
+  pendingFiles=[];renderPreview();
+  setTimeout(()=>{if(currentPanel==='usage')loadUsage()},2000);
+}
+
+// ── File attachments ───────────────────────────────────────────────────────
+const MAX_FILE=10*1024*1024;
+let pendingFiles=[];
+
+function openFilePicker(){document.getElementById('file-input').click()}
+
+function readFileB64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function onFilesSelected(fileList){
+  for(const f of Array.from(fileList)){
+    if(f.size>MAX_FILE){alert(`"${f.name}" is too large (max 10 MB).`);continue}
+    const data=await readFileB64(f);
+    const preview=f.type.startsWith('image/')?URL.createObjectURL(f):null;
+    pendingFiles.push({name:f.name,type:f.type,data,preview});
+  }
+  renderPreview();
+  document.getElementById('file-input').value='';
+}
+
+function removeFile(i){
+  if(pendingFiles[i]?.preview)URL.revokeObjectURL(pendingFiles[i].preview);
+  pendingFiles.splice(i,1);renderPreview();
+}
+
+function fileIcon(mime){
+  if(mime.startsWith('image/'))return'🖼';if(mime.startsWith('video/'))return'🎬';
+  if(mime.startsWith('audio/'))return'🎵';if(mime==='application/pdf')return'📑';return'📄';
+}
+
+function renderPreview(){
+  const strip=document.getElementById('attach-preview');
+  if(!pendingFiles.length){strip.innerHTML='';return}
+  strip.innerHTML=pendingFiles.map((f,i)=>f.preview
+    ?`<div class="preview-item"><img src="${f.preview}" title="${esc(f.name)}"/><button class="preview-remove" onclick="removeFile(${i})">✕</button></div>`
+    :`<div class="preview-item"><div class="preview-chip"><span class="chip-icon">${fileIcon(f.type)}</span><span class="chip-name" title="${esc(f.name)}">${esc(f.name)}</span></div><button class="preview-remove" onclick="removeFile(${i})">✕</button></div>`
+  ).join('');
+}
+
+// Drag-and-drop
+$msgs.addEventListener('dragover',(e)=>{e.preventDefault();$msgs.style.outline='2px dashed var(--accent)'});
+$msgs.addEventListener('dragleave',()=>{$msgs.style.outline=''});
+$msgs.addEventListener('drop',(e)=>{e.preventDefault();$msgs.style.outline='';if(e.dataTransfer?.files?.length)onFilesSelected(e.dataTransfer.files)});
+
+// ── Skills panel ───────────────────────────────────────────────────────────
+const SKILL_ICONS=['⚡','🔧','🌐','📁','📅','🔔','🤖','🎯','🔍','📊','🛡️','☁️','📋','🔗'];
+let skillIconIdx=0;
+function nextIcon(){return SKILL_ICONS[skillIconIdx++%SKILL_ICONS.length]}
+
+async function loadSkills(){
+  const grid=document.getElementById('skills-grid');
+  const errEl=document.getElementById('skills-error');
+  const errMsg=document.getElementById('skills-error-msg');
+  errEl.style.display='none';
+  skillIconIdx=0;
+  try{
+    const skills=await api('/api/skills');
+    if(!skills||!skills.length){
+      grid.innerHTML='<div class="empty-state"><div class="empty-icon">⚡</div>No skills loaded</div>';
+      return;
+    }
+    grid.innerHTML=skills.map(s=>`
+      <div class="skill-card${s.enabled?' enabled-card':''}" id="skill-card-${esc(s.name)}">
+        <div class="skill-card-top">
+          <div class="skill-icon">${nextIcon()}</div>
+          <div class="skill-info">
+            <div class="skill-name-text" title="${esc(s.name)}">${esc(s.name)}</div>
+            <div class="skill-file">${esc(s.executor||s.name+'.ts')}</div>
+          </div>
+        </div>
+        ${s.description?`<div class="skill-desc">${esc(s.description.slice(0,120))}${s.description.length>120?'…':''}</div>`:''}
+        <div class="skill-footer">
+          <span class="skill-badge ${s.enabled?'on':'off'}">${s.enabled?'ENABLED':'DISABLED'}</span>
+          <label class="toggle-wrap" title="${s.enabled?'Disable':'Enable'} ${s.name}">
+            <div class="toggle">
+              <input type="checkbox" ${s.enabled?'checked':''} onchange="toggleSkill('${esc(s.name)}',this)"/>
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </div>
+          </label>
+        </div>
+      </div>`).join('');
+  }catch(err){
+    errEl.style.display='flex';
+    errMsg.textContent='Failed to load skills: '+err.message;
+    grid.innerHTML='';
+  }
+}
+
+async function toggleSkill(name,checkbox){
+  checkbox.disabled=true;
+  try{
+    await api(`/api/skills/${encodeURIComponent(name)}/toggle`,'POST');
+    await loadSkills();
+  }catch(err){
+    checkbox.checked=!checkbox.checked;
+    const errEl=document.getElementById('skills-error');
+    const errMsg=document.getElementById('skills-error-msg');
+    errEl.style.display='flex';
+    errMsg.textContent='Toggle failed: '+err.message;
+  }finally{
+    checkbox.disabled=false;
+  }
+}
+
+// ── Status panel ───────────────────────────────────────────────────────────
+async function loadStatus(){
+  const errEl=document.getElementById('status-error');
+  const errMsg=document.getElementById('status-error-msg');
+  errEl.style.display='none';
+  try{
+    const [health,hbLog,skills,pulse]=await Promise.all([
+      api('/api/health'),
+      api('/api/heartbeat/log').catch(()=>[]),
+      api('/api/skills').catch(()=>[]),
+      api('/api/pulse').catch(()=>null),
+    ]);
+    document.getElementById('stat-uptime').textContent=fmtUptime(health.uptime_s||0);
+    document.getElementById('stat-version').textContent=health.version||'—';
+    document.getElementById('stat-nodes').textContent=health.nodes_connected??'—';
+    document.getElementById('stat-agents').textContent=health.agents_loaded??'—';
+    document.getElementById('stat-skills').textContent=(skills||[]).length;
+    renderHbLog(hbLog||[]);
+    renderPulse(pulse);
+  }catch(err){
+    errEl.style.display='flex';
+    errMsg.textContent='Failed to load status: '+err.message;
+  }
+}
+
+function renderHbLog(entries){
+  const tbody=document.getElementById('hb-tbody');
+  if(!entries.length){
+    tbody.innerHTML='<tr><td colspan="3" style="text-align:center;color:var(--text-faint);padding:18px">No heartbeat data yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML=entries.slice(0,20).map(e=>{
+    const ts=new Date(e.ts).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const ok=!e.result||!e.result.toLowerCase().includes('err');
+    return`<tr>
+      <td style="color:var(--text-faint);font-size:11px">${esc(ts)}</td>
+      <td class="${ok?'hb-result-ok':'hb-result-err'}">${esc(e.result||'—')}</td>
+      <td style="color:var(--text-dim)">${e.duration_ms!=null?e.duration_ms+'ms':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPulse(data){
+  const dot=document.getElementById('pulse-dot');
+  const meta=document.getElementById('pulse-meta');
+  const monitorsEl=document.getElementById('pulse-monitors');
+  const alertsEl=document.getElementById('pulse-alerts-list');
+
+  if(!data){
+    dot.className='pulse-dot dead';
+    meta.innerHTML='Pulse data unavailable';
+    monitorsEl.innerHTML='';
+    return;
+  }
+
+  const age=data.lastTickTs?Date.now()-data.lastTickTs:Infinity;
+  dot.className=!data.running||!data.lastTickTs?'pulse-dot dead':age<data.intervalSec*3000?'pulse-dot alive':'pulse-dot stale';
+
+  const lastCheck=data.lastTickTs
+    ?new Date(data.lastTickTs).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+    :'never';
+  meta.innerHTML=`Every <span>${data.intervalSec}s</span> &nbsp;·&nbsp; Last tick <span>${lastCheck}</span> &nbsp;·&nbsp; Total alerts <span>${data.totalAlerts||0}</span>`;
+
+  if(!data.monitors||!data.monitors.length){
+    monitorsEl.innerHTML='<div style="color:var(--text-faint);font-size:12px">No monitors registered</div>';
+  }else{
+    monitorsEl.innerHTML=data.monitors.map(m=>{
+      const lc=m.lastCheckTs?new Date(m.lastCheckTs).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
+      const la=m.lastAlertTs?new Date(m.lastAlertTs).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'none';
+      const alertTxt=m.lastAlertText?`<div class="pulse-monitor-alert">${esc(m.lastAlertText.slice(0,60))}${m.lastAlertText.length>60?'…':''}</div>`:'';
+      return`<div class="pulse-monitor-card">
+        <div class="pulse-monitor-name">${esc(m.name)}</div>
+        <div class="pulse-monitor-stat">Last check: <span class="val">${esc(lc)}</span></div>
+        <div class="pulse-monitor-stat">Alerts: <span class="val">${m.alertCount||0}</span> &nbsp; Last: <span class="val">${esc(la)}</span></div>
+        ${alertTxt}
+      </div>`;
+    }).join('');
+  }
+
+  if(!data.recentAlerts||!data.recentAlerts.length){
+    alertsEl.innerHTML='<div class="pulse-empty">No pulse alerts yet</div>';
+  }else{
+    alertsEl.innerHTML=data.recentAlerts.map(a=>{
+      const ts=new Date(a.ts).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      return`<div class="pulse-alert-row">
+        <span class="pulse-alert-ts">${esc(ts)}</span>
+        <span class="pulse-alert-monitor">${esc(a.monitor)}</span>
+        <span class="pulse-alert-text">${esc(a.text)}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function triggerHeartbeat(){
+  const btn=document.getElementById('hb-trigger-btn');
+  btn.disabled=true;btn.textContent='Running…';
+  try{
+    await api('/api/heartbeat/run','POST');
+    setTimeout(loadStatus,1200);
+  }catch(err){
+    const errEl=document.getElementById('status-error');
+    const errMsg=document.getElementById('status-error-msg');
+    errEl.style.display='flex';
+    errMsg.textContent='Heartbeat failed: '+err.message;
+  }finally{
+    setTimeout(()=>{btn.disabled=false;btn.textContent='▶ Trigger Heartbeat'},1500);
+  }
+}
+
+// ── Usage panel ────────────────────────────────────────────────────────────
+async function loadUsage(){
+  const errEl=document.getElementById('usage-error');
+  const errMsg=document.getElementById('usage-error-msg');
+  errEl.style.display='none';
+  try{
+    const data=await api('/api/usage');
+    const totalIn=data.total_input??0;
+    const totalOut=data.total_output??0;
+    document.getElementById('stat-tok-in').textContent=fmtTok(totalIn);
+    document.getElementById('stat-tok-out').textContent=fmtTok(totalOut);
+    document.getElementById('stat-tok-total').textContent=fmtTok(totalIn+totalOut);
+    document.getElementById('stat-tok-calls').textContent=data.calls?.length??0;
+
+    const tbody=document.getElementById('usage-tbody');
+    const calls=(data.calls||[]).slice(0,50);
+    if(!calls.length){
+      tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px">No calls yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML=calls.map(c=>{
+      const ts=new Date(c.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      return`<tr>
+        <td style="color:var(--text-faint);font-size:11px">${esc(ts)}</td>
+        <td style="font-size:11px">${esc(c.tier||'—')}</td>
+        <td class="tok-model">${esc((c.model||'—').slice(0,30))}</td>
+        <td class="tok-in">${fmtTok(c.input_tokens??0)}</td>
+        <td class="tok-out">${fmtTok(c.output_tokens??0)}</td>
+      </tr>`;
+    }).join('');
+  }catch(err){
+    errEl.style.display='flex';
+    errMsg.textContent='Failed to load usage: '+err.message;
+  }
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+function boot(){
+  connect();
+  setTimeout(()=>{loadUsage();loadSkills()},600);
+}
+
+if(getKey()){
+  document.getElementById('login-screen').classList.add('hidden');
+  boot();
+}
+</script>
+</body>
+</html>
