@@ -59,7 +59,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -76,18 +76,33 @@ jobs:
     needs: build-push
     environment: production
     # Only deploy on pushes to main or version tags — not PRs
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && secrets.DEPLOY_HOST != ''
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check required deploy secrets
+        id: check-secrets
+        run: |
+          missing=""
+          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
+          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
+          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::warning::Skipping deploy — missing secrets:$missing"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Deploy via SSH
+        if: steps.check-secrets.outputs.skip == 'false'
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          port: ${{ secrets.DEPLOY_PORT || '22' }}
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH || '/opt/respireeclaw' }}
