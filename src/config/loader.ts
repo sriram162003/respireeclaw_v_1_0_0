@@ -32,7 +32,10 @@ export interface GatewayConfig {
 
 function interpolateEnv(obj: unknown): unknown {
   if (typeof obj === 'string') {
-    return obj.replace(/\$\{([^}]+)\}/g, (_, key) => process.env[key] ?? '');
+    return obj.replace(/\$\{([^}]+)\}/g, (_, expr) => {
+      const [key, ...rest] = expr.split(':-');
+      return process.env[key] ?? rest.join(':-');
+    });
   }
   if (Array.isArray(obj)) return obj.map(interpolateEnv);
   if (obj && typeof obj === 'object') {

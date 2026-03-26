@@ -129,7 +129,8 @@ export class LLMRouter {
         const baseUrl = providerCfg?.base_url ?? 'https://integrate.api.nvidia.com/v1';
         // NVIDIA NIM model strings are org/model (e.g. moonshotai/kimi-k2.5, nvidia/llama-3.1-nemotron-70b-instruct)
         // The router split already stripped the 'nvidia/' provider prefix, so pass model directly.
-        return new OpenAIAdapter(apiKey, model, baseUrl);
+        // Disable thinking mode by default — it causes huge latency (30-60s+) with no visible benefit.
+        return new OpenAIAdapter(apiKey, model, baseUrl, { chat_template_kwargs: { thinking: false } });
       }
       case 'groq': {
         const apiKey = providerCfg?.api_key ?? process.env['GROQ_API_KEY'] ?? '';
