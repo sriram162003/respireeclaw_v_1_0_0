@@ -706,7 +706,7 @@ export class RestAPI {
           gemini:     ['gemini-1.5-pro', 'gemini-1.5-flash'],
           mistral:    ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b'],
           openrouter: ['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'meta-llama/llama-3.1-70b-instruct'],
-          nvidia:     ['nvidia/nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/nvidia/llama-3.1-nemotron-nano-8b-v1', 'nvidia/moonshotai/kimi-k2.5', 'nvidia/mistralai/mistral-nemo-12b-instruct'],
+          nvidia:     ['nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/llama-3.1-nemotron-nano-8b-v1', 'nvidia/moonshotai/kimi-k2.5', 'nvidia/mistralai/mistral-nemo-12b-instruct'],
           groq:       ['groq/llama-3.3-70b-versatile', 'groq/llama-3.1-8b-instant', 'groq/mixtral-8x7b-32768', 'groq/gemma2-9b-it'],
           deepseek:   ['deepseek/deepseek-chat', 'deepseek/deepseek-reasoner'],
           xai:        ['xai/grok-2-latest', 'xai/grok-2-vision-preview', 'xai/grok-3-latest'],
@@ -769,9 +769,13 @@ export class RestAPI {
           // Normalize to a flat string[] with provider prefix for use in routing
           let ids: string[] = [];
           if (provider === 'ollama') {
-            ids = ((data['models'] as Array<{ name: string }>) ?? []).map(m => `ollama/${m.name}`);
+            ids = ((data['models'] as Array<{ name: string }>) ?? []).map(m =>
+              m.name.startsWith('ollama/') ? m.name : `ollama/${m.name}`
+            );
           } else {
-            ids = ((data['data'] as Array<{ id: string }>) ?? []).map(m => `${meta.prefix}${m.id}`);
+            ids = ((data['data'] as Array<{ id: string }>) ?? []).map(m =>
+              (meta.prefix && m.id.startsWith(meta.prefix)) ? m.id : `${meta.prefix ?? ''}${m.id}`
+            );
           }
           return this.json(res, 200, { provider, models: ids });
         } catch (err) {

@@ -2,7 +2,7 @@ name: selenium_testing
 version: 1.0.0
 description: Browser-based UI testing powered by Selenium WebDriver + Chromium. Write and run tests, assert page elements, fill forms, and generate test scripts for any web application.
 executor: selenium_testing.ts
-enabled: true
+enabled: false
 source: human
 requires_env: []
 tools:
