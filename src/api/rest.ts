@@ -396,6 +396,7 @@ export interface RestAPIParams {
   orchestrator:     AgentOrchestrator;
   tokenStats:       TokenStats;
   webchatAdapter?:  { handleChatUpgrade: (req: IncomingMessage, socket: import('stream').Duplex, head: Buffer) => void };
+  teamsAdapter?:    { processRequest: (req: IncomingMessage, res: ServerResponse) => void };
 }
 
 const VERSION = '1.0.0';
@@ -524,6 +525,16 @@ export class RestAPI {
     const url = new URL(req.url ?? '/', `http://localhost`);
     const path = url.pathname;
     const method = req.method ?? 'GET';
+
+    // Microsoft Teams Bot Framework webhook — no gateway auth (Azure signs the request itself)
+    if (method === 'POST' && path === '/microsoft-teams') {
+      if (this.params.teamsAdapter) {
+        this.params.teamsAdapter.processRequest(req, res);
+      } else {
+        res.writeHead(503).end('Teams channel not enabled');
+      }
+      return;
+    }
 
     // Authenticate all /api/* endpoints (except /api/health and /api/auth/*)
     // Only require auth if API keys exist in keys.yaml

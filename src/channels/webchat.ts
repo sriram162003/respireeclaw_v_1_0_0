@@ -123,7 +123,7 @@ export class WebChatAdapter implements ChannelAdapter {
         agent_name: this.agentName,
       }));
 
-      ws.on('message', (data: Buffer) => {
+      ws.on('message', async (data: Buffer) => {
         try {
           const msg  = JSON.parse(data.toString()) as Record<string, unknown>;
           const text = msg['text'] as string | undefined;
@@ -149,6 +149,15 @@ export class WebChatAdapter implements ChannelAdapter {
             if (isTextFile(f)) {
               const content = Buffer.from(f.data, 'base64').toString('utf8');
               fallbackText += `\n\n--- ${f.name} ---\n${content}`;
+            } else if (f.name.endsWith('.docx') || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+              try {
+                const mammoth = await import('mammoth');
+                const buffer = Buffer.from(f.data, 'base64');
+                const result = await mammoth.extractRawText({ buffer });
+                fallbackText += `\n\n--- ${f.name} ---\n${result.value}`;
+              } catch (err) {
+                fallbackText += `\n\n--- ${f.name} ---\n[Could not extract text: ${String(err)}]`;
+              }
             }
           }
 
