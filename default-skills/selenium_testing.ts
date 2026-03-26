@@ -14,7 +14,7 @@ import { join } from 'path';
 
 const CHROMIUM_BIN = '/usr/bin/chromium';
 const CHROMEDRIVER_BIN = '/usr/bin/chromedriver';
-const SCREENSHOTS_DIR = '/root/.aura/workspace/selenium_screenshots';
+const SCREENSHOTS_DIR = '/root/.aura/workspace';
 
 function buildDriver(): WebDriver {
   const options = new chrome.Options();
@@ -273,6 +273,7 @@ export async function take_test_screenshot(
   const startMs = Date.now();
 
   let saved: string | undefined;
+  let filename: string | undefined;
   let title: string | undefined;
   let errorMessage: string | undefined;
   let highlighted = false;
@@ -311,7 +312,7 @@ export async function take_test_screenshot(
         .replace(/^https?:\/\//, '')
         .replace(/[^a-z0-9]/gi, '_')
         .slice(0, 60);
-      const filename = args.filename ?? `${slug}_${Date.now()}.png`;
+      filename = args.filename ?? `${slug}_${Date.now()}.png`;
       saved = join(SCREENSHOTS_DIR, filename);
 
       const png: string = await driver.takeScreenshot();
@@ -324,6 +325,7 @@ export async function take_test_screenshot(
 
   return {
     saved,
+    filename,
     title,
     highlighted,
     highlight_selector: args.highlight_selector,
@@ -331,6 +333,7 @@ export async function take_test_screenshot(
     error: errorMessage,
     duration_ms: Date.now() - startMs,
     url: args.url,
+    next_step: filename ? `Call send_file with filename: "${filename}" to send this screenshot to the user` : undefined,
   };
 }
 

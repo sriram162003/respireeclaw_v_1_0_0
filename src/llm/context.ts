@@ -80,7 +80,7 @@ export class ContextBuilder {
       // List actual tools with descriptions so the agent knows what it can do
       const toolList = nonInternalTools.map(t => `  - ${t.name}: ${t.description}`).join('\n');
       system += `\n\nAVAILABLE TOOLS:\n${toolList}`;
-      system += `\n\nWhen tool calls don't depend on each other, call all of them together in one response — mix different tools freely and call the same tool multiple times with different arguments (e.g. describe_instances for every region + list_s3_buckets + list_lambda at the same time). Only call sequentially when a tool needs the result of a previous one.`;
+      system += `\n\nWhen tool calls don't depend on each other, call all of them together in one response. Prefer direct parallel tool calls over spawn_agent_team — only use spawn_agent_team when a task genuinely requires coordinating many subtasks across multiple instances or regions simultaneously. For simple queries (e.g. list instances, check status, describe a single resource), call the appropriate tool directly instead of wrapping it in spawn_agent_team. Only call sequentially when a tool needs the result of a previous one.`;
     }
 
     // ── Live channel connections ───────────────────────────────────────────────

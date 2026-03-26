@@ -5,10 +5,12 @@ export class OpenAIAdapter implements LLMAdapter {
   private client: OpenAI;
   readonly provider = 'openai';
   readonly model: string;
+  private extraBody?: Record<string, unknown>;
 
-  constructor(apiKey: string, model: string, baseURL?: string) {
-    this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  constructor(apiKey: string, model: string, baseURL?: string, extraBody?: Record<string, unknown>) {
+    this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}), timeout: 120_000 });
     this.model = model;
+    this.extraBody = extraBody;
   }
 
   async complete(params: LLMParams): Promise<LLMResponse> {
@@ -60,6 +62,7 @@ export class OpenAIAdapter implements LLMAdapter {
         ...messages,
       ],
       ...(tools && tools.length > 0 ? { tools } : {}),
+      ...(this.extraBody ? { extra_body: this.extraBody } : {}),
     });
 
     const choice = response.choices[0];

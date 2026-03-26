@@ -147,6 +147,7 @@ async function main(): Promise<void> {
     config.security.bind_address  ?? '0.0.0.0',
   );
 
+  const teamsAdapter = new TeamsAdapter();
   const channels = new ChannelManager();
   await channels.init(config, {
     telegram:    new TelegramAdapter(),
@@ -155,7 +156,7 @@ async function main(): Promise<void> {
     slack:       new SlackAdapter(),
     discord:     new DiscordAdapter(),
     google_chat: new GoogleChatAdapter(),
-    teams:       new TeamsAdapter(),
+    teams:       teamsAdapter,
     webchat:     webchatAdapter,
   });
 
@@ -213,7 +214,7 @@ async function main(): Promise<void> {
   // Send-file tool — lets the agent send workspace files back to the user as attachments
   const sendFileToolDef = {
     name: 'send_file',
-    description: 'Send a file from the workspace back to the user as a media attachment (image, audio, video, or document). Use after workspace_write to share a generated or processed file. The file must be at the workspace root level (not in a subdirectory).',
+    description: 'Send a file from the workspace back to the user as a media attachment (image, audio, video, or document). Use after workspace_write, take_test_screenshot, or any tool that saves a file to the workspace. Always call this after take_test_screenshot to deliver the screenshot. The file must be at the workspace root level (not in a subdirectory).',
     parameters: {
       type: 'object',
       properties: {
@@ -611,6 +612,7 @@ async function main(): Promise<void> {
     heartbeatLog, startTime: START_TIME,
     orchestrator, tokenStats,
     webchatAdapter,
+    teamsAdapter: config.channels['teams']?.enabled ? teamsAdapter : undefined,
   });
   await restApi.start();
 

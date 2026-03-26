@@ -123,18 +123,46 @@ export class WebChatAdapter implements ChannelAdapter {
         agent_name: this.agentName,
       }));
 
-      ws.on('message', (data: Buffer) => {
+      ws.on('message', async (data: Buffer) => {
         try {
           const msg  = JSON.parse(data.toString()) as Record<string, unknown>;
           const text = msg['text'] as string | undefined;
           const files = msg['files'] as Array<{ name: string; type: string; data: string }> | undefined;
           
           const imageFiles = files ? files.filter(f => f.type.startsWith('image/')) : [];
+          const docFiles   = files ? files.filter(f => !f.type.startsWith('image/') && !f.type.startsWith('audio/') && !f.type.startsWith('video/')) : [];
           const hasImage = imageFiles.length > 0;
-          if (!text && !hasImage) return;
+          const hasDoc   = docFiles.length > 0;
+          if (!text && !hasImage && !hasDoc) return;
+
+          // Build fallback text label — include doc content for text-based files
+          const TEXT_MIME = new Set(['text/plain','text/markdown','text/csv','text/html','text/xml','application/json','application/xml']);
+          const isTextFile = (f: { type: string; name: string }) =>
+            TEXT_MIME.has(f.type) || f.name.endsWith('.md') || f.name.endsWith('.txt') || f.name.endsWith('.csv') || f.name.endsWith('.json');
+
+          let fallbackText = text || '';
+          if (!text && hasImage) fallbackText = imageFiles.length === 1 ? '[Image attached]' : `[${imageFiles.length} images attached]`;
+          if (!text && hasDoc)   fallbackText = docFiles.length === 1 ? `[File attached: ${docFiles[0]!.name}]` : `[${docFiles.length} files attached]`;
+
+          // Inject readable text-file contents so the LLM can actually see them
+          for (const f of docFiles) {
+            if (isTextFile(f)) {
+              const content = Buffer.from(f.data, 'base64').toString('utf8');
+              fallbackText += `\n\n--- ${f.name} ---\n${content}`;
+            } else if (f.name.endsWith('.docx') || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+              try {
+                const mammoth = await import('mammoth');
+                const buffer = Buffer.from(f.data, 'base64');
+                const result = await mammoth.extractRawText({ buffer });
+                fallbackText += `\n\n--- ${f.name} ---\n${result.value}`;
+              } catch (err) {
+                fallbackText += `\n\n--- ${f.name} ---\n[Could not extract text: ${String(err)}]`;
+              }
+            }
+          }
 
           const payload: UtterancePayload = {
-            text: text || (imageFiles.length === 1 ? '[Image attached]' : `[${imageFiles.length} images attached]`),
+            text: fallbackText,
             routing_hint: hasImage ? 'vision' : 'simple'
           };
 
