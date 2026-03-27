@@ -16,31 +16,40 @@ description: |
          - steps: array of test steps with Playwright scripts
     3. Call tsd_runner.finish_report → report sent to webchat automatically
 
+  CRITICAL RULES FOR STEP SCRIPTS:
+    1. Every script MUST call assert() at least once — a script with no assertions will be marked FAIL (unverified).
+    2. Always wait for elements before interacting — use waitForSelector or locator().waitFor().
+    3. Always verify the expected outcome stated in the TSD document using assert().
+    4. Never write a script that just navigates without checking what happened.
+    5. If you don't know the selectors, call playwright_testing.inspect_page first on the URL.
+
   STEP SCRIPT GLOBALS:
     - page: Playwright Page object (already navigated, session loaded, logged in)
-    - assert(condition, name, actual?): record a named assertion
+    - assert(condition, name, actual?): REQUIRED — must be called at least once per script
 
-  EXAMPLE STEP SCRIPTS:
-    Navigate and click:
+  REAL EXAMPLES (always write scripts like these):
+
+    Navigate to settings and verify tab is visible:
       await page.click('text=Settings');
       await page.waitForLoadState('domcontentloaded');
+      const accountTab = await page.locator('text=Account').isVisible();
+      assert(accountTab, 'Account tab is visible on Settings page');
 
-    Fill a form field and assert error message:
-      await page.fill('#new-password', 'test');
-      await page.click('button[type=submit]');
-      const msg = await page.locator('.error-message').textContent();
-      assert(msg?.includes('at least 8 characters'), 'validation message shown', msg ?? '');
+    Fill field with weak password and assert validation error:
+      await page.locator('input[placeholder*="New Password" i], input[name*="new" i]').fill('test');
+      await page.locator('button[type=submit], button:has-text("Save")').click();
+      await page.waitForTimeout(1000);
+      const pageText = await page.locator('body').innerText();
+      assert(pageText.includes('8 characters') || pageText.includes('uppercase') || pageText.includes('special'), 'password validation message shown', pageText.slice(0, 200));
 
-    Assert toast notification:
-      await page.waitForSelector('.toast, .notification, [role=alert]', { timeout: 5000 });
-      const toast = await page.locator('.toast, .notification, [role=alert]').first().textContent();
-      assert(toast?.includes('Success'), 'success toast shown', toast ?? '');
+    Assert success toast after saving:
+      await page.waitForTimeout(500);
+      const body = await page.locator('body').innerText();
+      assert(body.toLowerCase().includes('success'), 'success message shown after save', body.slice(0, 300));
 
-  WRITING SCRIPTS:
-    - Use page.locator(), page.click(), page.fill(), page.waitForSelector() etc.
-    - Call inspect_page (from playwright_testing skill) first if you need to find selectors
-    - Each step's script starts where the previous step ended (same page, same session)
-    - Use assert() to record expected outcomes — failures are captured but execution continues
+    Assert account locked message:
+      const body = await page.locator('body').innerText();
+      assert(body.toLowerCase().includes('lock') || body.toLowerCase().includes('account'), 'account locked message shown', body.slice(0, 300));
 
 executor: playwright_runner.ts
 enabled: true

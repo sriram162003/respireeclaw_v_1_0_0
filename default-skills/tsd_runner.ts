@@ -196,14 +196,17 @@ export async function record_step(
 
   // Replace if step already recorded (allow re-recording a step)
   const existing = report.steps.findIndex(s => s.step_number === args.step_number);
+  const trunc = (s: string | undefined | null, max = 500) =>
+    s ? s.replace(/[\u0000-\u001F\u007F]/g, ' ').slice(0, max) : null;
+
   const step: StepRecord = {
     step_number: args.step_number,
-    description: args.description,
-    expected: args.expected ?? null,
+    description: trunc(args.description, 1000) ?? '',
+    expected: trunc(args.expected),
     passed: args.passed,
-    actual: args.actual ?? null,
+    actual: trunc(args.actual),
     screenshot_filename: args.screenshot_filename ?? null,
-    notes: args.notes ?? null,
+    notes: trunc(args.notes),
     recorded_at: new Date().toISOString(),
   };
 

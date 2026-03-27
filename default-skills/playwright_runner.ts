@@ -215,7 +215,13 @@ export async function run_test_scenario(
         const assert = makeAssert(assertions);
         const fn = new Function('page', 'assert', `return (async () => { ${step.script} })();`);
         await fn(page, assert);
-        passed = true;
+        // A step with no assertions didn't actually verify anything — mark as unverified
+        if (assertions.length === 0) {
+          errorMsg = 'No assertions made — script ran but nothing was verified. Rewrite the script to call assert() to check expected outcomes.';
+          passed = false;
+        } else {
+          passed = true;
+        }
       } catch (err) {
         errorMsg = err instanceof Error ? err.message : String(err);
         passed   = false;
