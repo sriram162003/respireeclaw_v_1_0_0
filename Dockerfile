@@ -44,6 +44,10 @@ COPY . .
 # Create .env file with defaults
 RUN touch .env
 
+# Tell Playwright to use the system Chromium instead of downloading its own browsers
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Create Aura directory for config/data
 RUN mkdir -p /root/.aura
 

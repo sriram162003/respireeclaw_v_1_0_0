@@ -1,0 +1,141 @@
+name: tsd_runner
+version: 1.0.0
+description: |
+  TSD (Test Scenario Document) reporting layer for structured UI test execution.
+
+  MANDATORY WORKFLOW — follow these steps in order every time:
+
+  STEP A — Login first (ALWAYS do this before any test steps):
+    Call playwright_testing.login with:
+      - url: the login page URL
+      - username_value / password_value: the credentials provided by the user
+      - session_name: a short name for the role being tested (e.g. "nurse_manager")
+      - success_url_contains: a URL fragment that appears after successful login (e.g. "/dashboard")
+    If login returns success=false, call playwright_testing.inspect_page on the login URL to discover selectors, then retry login with explicit selectors.
+    DO NOT proceed to test steps if login fails.
+
+  STEP B — Start the report:
+    Call tsd_runner.start_report with scenario_id, scenario_title, severity, user_role, and the session_name from Step A.
+    Save the returned report_id — use it in every record_step and finish_report call.
+
+  STEP C — Execute test steps:
+    PREFERRED: Use playwright_runner.run_test_scenario with the report_id — it runs all steps in one browser session and auto-records each step. Do NOT call record_step separately when using playwright_runner.
+    MANUAL (only if not using playwright_runner): For each step call playwright_testing tools, then call record_step with the result.
+    For OTP/email steps: set passed=null, ask the user for the code, then continue after they provide it.
+
+  STEP D — Finish:
+    Call tsd_runner.finish_report → the formatted report is sent directly to webchat automatically.
+
+  IMPORTANT: Never use run_script to do an entire test scenario in one call. Execute steps one at a time.
+executor: tsd_runner.ts
+enabled: true
+source: human
+requires_env: []
+tools:
+  - name: start_report
+    description: Initialize a new TSD scenario report. Call this before executing any test steps. Returns a report_id to use in all subsequent record_step and finish_report calls.
+    parameters:
+      type: object
+      properties:
+        scenario_id:
+          type: string
+          description: TSD scenario identifier (e.g. "TSD_A01_01")
+        scenario_title:
+          type: string
+          description: Human-readable title (e.g. "Change Password")
+        severity:
+          type: string
+          description: Severity level from the TSD document (e.g. "Severity 1 – Go Live Critical")
+        user_role:
+          type: string
+          description: The user role being tested (e.g. "Nurse Manager", "Nurse")
+        session_name:
+          type: string
+          description: Playwright session name used for this scenario (for reference only)
+      required: [scenario_id, scenario_title]
+
+  - name: record_step
+    description: Record the result of one test step. Call this after executing each step with playwright_testing tools. Pass passed=true for success, passed=false for failure, passed=null for skipped/awaiting-OTP steps.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id returned by start_report
+        step_number:
+          type: number
+          description: Step number (1, 2, 3, ...)
+        description:
+          type: string
+          description: What was done in this step (copy from TSD document)
+        expected:
+          type: string
+          description: Expected result as stated in the TSD document (if any)
+        passed:
+          type: boolean
+          description: "true = PASS, false = FAIL, null = SKIP (e.g. OTP step awaiting user input)"
+          nullable: true
+        actual:
+          type: string
+          description: What actually happened (URL navigated to, message seen, error encountered)
+        screenshot_filename:
+          type: string
+          description: Filename of screenshot taken for this step (from playwright_testing.take_screenshot)
+        notes:
+          type: string
+          description: Any additional notes or observations
+      required: [report_id, step_number, description, passed]
+
+  - name: finish_report
+    description: Finalize the scenario report. Calculates overall Pass/Fail, formats a TSD-style markdown report, and sends it directly to webchat. Call this after all steps are recorded.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id returned by start_report
+        overall_result:
+          type: string
+          description: "Overall result: PASS or FAIL. Auto-calculated from steps if omitted (PASS only if all steps passed)."
+          enum: [PASS, FAIL]
+        comments:
+          type: string
+          description: Any overall comments to include at the bottom of the report
+        date_tested:
+          type: string
+          description: Date tested in YYYY-MM-DD format. Defaults to today.
+      required: [report_id]
+
+  - name: get_report
+    description: Get the current state of a report at any time, including a formatted markdown preview. Use to check progress mid-scenario or retrieve a completed report.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id to retrieve
+      required: [report_id]
+
+  - name: list_reports
+    description: List all saved TSD reports, optionally filtered by scenario_id. Returns summary info including Pass/Fail counts and overall result.
+    parameters:
+      type: object
+      properties:
+        scenario_id:
+          type: string
+          description: Optional filter — only return reports for this scenario (e.g. "TSD_A01_01")
+      required: []
+
+  - name: send_report
+    description: Send a completed TSD report to webchat with screenshot attachments. Call this when the user asks to see a report or its screenshots. Sends the formatted text report first, then each step's screenshot as an inline photo with a step/pass-fail caption. Use list_reports first to find the report_id if needed.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id to send (from start_report or list_reports)
+        screenshots:
+          type: string
+          enum: [all, failed, none]
+          description: "Which screenshots to attach: 'all' (default) sends every step's screenshot, 'failed' sends only failed steps, 'none' sends text report only"
+      required: [report_id]

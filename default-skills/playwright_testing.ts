@@ -106,16 +106,144 @@ function makeAssert(results: AssertResult[]) {
   };
 }
 
+// ── inspect_page ──────────────────────────────────────────────────────────────
+
+export async function inspect_page(
+  args: {
+    url: string;
+    session_name?: string;
+  },
+  _ctx: unknown,
+): Promise<unknown> {
+  const startMs = Date.now();
+  let errorMessage: string | undefined;
+  let result: unknown;
+
+  try {
+    await withPage(args.url, args.session_name, async (page) => {
+      await page.waitForLoadState('domcontentloaded');
+
+      const data = await page.evaluate(() => {
+        // Collect all input fields
+        const inputs = Array.from(document.querySelectorAll('input, textarea, select')).map((el) => {
+          const e = el as HTMLInputElement;
+          const id = e.id ? `#${e.id}` : null;
+          const nameAttr = e.name ? `[name="${e.name}"]` : null;
+          const typeAttr = e.type ? `[type="${e.type}"]` : null;
+          const placeholder = e.placeholder || null;
+          const label = e.id
+            ? (document.querySelector(`label[for="${e.id}"]`) as HTMLElement | null)?.innerText?.trim() || null
+            : null;
+          return {
+            tag: e.tagName.toLowerCase(),
+            type: e.type || null,
+            id: e.id || null,
+            name: e.name || null,
+            placeholder,
+            label,
+            selector: id || (e.name ? `${e.tagName.toLowerCase()}[name="${e.name}"]` : null) || (typeAttr ? `${e.tagName.toLowerCase()}${typeAttr}` : e.tagName.toLowerCase()),
+            visible: !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length),
+          };
+        });
+
+        // Collect buttons and submit inputs
+        const buttons = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a[role=button]')).map((el) => {
+          const e = el as HTMLElement;
+          const id = e.id ? `#${e.id}` : null;
+          const text = e.textContent?.trim() || (e as HTMLInputElement).value || null;
+          const type = (e as HTMLInputElement).type || e.tagName.toLowerCase();
+          return {
+            tag: e.tagName.toLowerCase(),
+            type,
+            id: e.id || null,
+            text,
+            selector: id || (text ? `${e.tagName.toLowerCase()}:has-text("${text?.slice(0, 30)}")` : e.tagName.toLowerCase()),
+            visible: !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length),
+          };
+        });
+
+        // Collect forms
+        const forms = Array.from(document.querySelectorAll('form')).map((form, i) => ({
+          index: i,
+          id: form.id || null,
+          action: form.action || null,
+          method: form.method || null,
+          selector: form.id ? `#${form.id}` : `form:nth-of-type(${i + 1})`,
+        }));
+
+        return { inputs, buttons, forms, title: document.title, url: window.location.href };
+      });
+
+      result = {
+        url: page.url(),
+        title: (data as { title: string }).title,
+        forms: (data as { forms: unknown[] }).forms,
+        inputs: (data as { inputs: unknown[] }).inputs,
+        buttons: (data as { buttons: unknown[] }).buttons,
+        duration_ms: Date.now() - startMs,
+        hint: 'Use the selectors from inputs/buttons above to call login or fill_form',
+      };
+    });
+  } catch (err) {
+    errorMessage = err instanceof Error ? err.message : String(err);
+  }
+
+  return result ?? { error: errorMessage, url: args.url, duration_ms: Date.now() - startMs };
+}
+
 // ── login ─────────────────────────────────────────────────────────────────────
+
+// Common selector candidates tried in order when explicit selectors are not given
+const USERNAME_CANDIDATES = [
+  'input[type=email]',
+  'input[name=email]',
+  'input[name=username]',
+  'input[name=user]',
+  'input[name=login]',
+  'input[id*=email i]',
+  'input[id*=username i]',
+  'input[id*=user i]',
+  'input[placeholder*=email i]',
+  'input[placeholder*=username i]',
+  'input[placeholder*=user i]',
+  'input[type=text]',
+];
+
+const PASSWORD_CANDIDATES = [
+  'input[type=password]',
+];
+
+const SUBMIT_CANDIDATES = [
+  'button[type=submit]',
+  'input[type=submit]',
+  'button:has-text("Log in")',
+  'button:has-text("Login")',
+  'button:has-text("Sign in")',
+  'button:has-text("Sign In")',
+  'button:has-text("Continue")',
+  'button:has-text("Next")',
+  'button',
+];
+
+async function resolveSelector(page: Page, candidates: string[], explicit?: string): Promise<string> {
+  if (explicit) return explicit;
+  for (const sel of candidates) {
+    try {
+      const count = await page.locator(sel).count();
+      if (count > 0) return sel;
+    } catch { /* try next */ }
+  }
+  throw new Error(`Could not auto-detect selector. Tried: ${candidates.join(', ')}. Call inspect_page first to find the correct selector.`);
+}
 
 export async function login(
   args: {
     url: string;
-    username_selector: string;
+    username_selector?: string;
     username_value: string;
-    password_selector: string;
+    password_selector?: string;
     password_value: string;
-    submit_selector: string;
+    submit_selector?: string;
     success_url_contains?: string;
     session_name?: string;
   },
@@ -128,13 +256,19 @@ export async function login(
   let screenshot: string | undefined;
   let errorMessage: string | undefined;
   let success = false;
+  let resolved_selectors: { username?: string; password?: string; submit?: string } = {};
 
   try {
     await withRetry(async () => {
       await withPage(args.url, sessionName, async (page, _ctx2) => {
-        await page.locator(args.username_selector).fill(args.username_value);
-        await page.locator(args.password_selector).fill(args.password_value);
-        await page.locator(args.submit_selector).click();
+        const userSel = await resolveSelector(page, USERNAME_CANDIDATES, args.username_selector);
+        const passSel = await resolveSelector(page, PASSWORD_CANDIDATES, args.password_selector);
+        const submitSel = await resolveSelector(page, SUBMIT_CANDIDATES, args.submit_selector);
+        resolved_selectors = { username: userSel, password: passSel, submit: submitSel };
+
+        await page.locator(userSel).fill(args.username_value);
+        await page.locator(passSel).fill(args.password_value);
+        await page.locator(submitSel).click();
 
         if (args.success_url_contains) {
           await page.waitForURL(`**${args.success_url_contains}**`, { timeout: 15_000 });
@@ -167,10 +301,15 @@ export async function login(
     session_name: sessionName,
     final_url,
     title,
+    resolved_selectors,
     screenshot_on_failure: screenshot,
     duration_ms: Date.now() - startMs,
     error: errorMessage,
-    next_step: screenshot ? `Call send_file with filename: "${screenshot}" to show failure screenshot` : undefined,
+    next_step: success
+      ? undefined
+      : (screenshot
+          ? `Call send_file with filename: "${screenshot}" to show failure screenshot`
+          : `Call inspect_page with url: "${args.url}" to discover the correct CSS selectors for the login form, then retry login with explicit selectors`),
   };
 }
 

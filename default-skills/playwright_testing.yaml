@@ -6,8 +6,21 @@ enabled: true
 source: human
 requires_env: []
 tools:
+  - name: inspect_page
+    description: Navigate to a URL and return all form fields, buttons, and their CSS selectors. Use this before login or fill_form when you don't know the correct selectors. Returns inputs (with id, name, type, placeholder, label, selector) and buttons (with text and selector).
+    parameters:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Full URL of the page to inspect
+        session_name:
+          type: string
+          description: Optional session name to load saved login state (for protected pages)
+      required: [url]
+
   - name: login
-    description: Navigate to a login page, fill credentials, submit, and save the authenticated session for reuse. The session_name can be passed to any other tool to resume this logged-in state. Use different session_name values to manage multiple roles simultaneously (e.g. "nurse_manager", "nurse").
+    description: Navigate to a login page, fill credentials, submit, and save the authenticated session for reuse. Selectors are optional — if omitted, common patterns are tried automatically. If auto-detection fails, call inspect_page first to discover selectors. The session_name can be passed to any other tool to resume this logged-in state.
     parameters:
       type: object
       properties:
@@ -16,26 +29,26 @@ tools:
           description: Full URL of the login page (must start with http:// or https://)
         username_selector:
           type: string
-          description: CSS selector for the username/email input field
+          description: CSS selector for the username/email input field. Optional — auto-detected if omitted (tries input[type=email], input[name=email], input[name=username], etc.)
         username_value:
           type: string
           description: Username or email to enter
         password_selector:
           type: string
-          description: CSS selector for the password input field
+          description: CSS selector for the password input field. Optional — auto-detected if omitted (tries input[type=password]).
         password_value:
           type: string
           description: Password to enter
         submit_selector:
           type: string
-          description: CSS selector for the login/submit button
+          description: CSS selector for the login/submit button. Optional — auto-detected if omitted (tries button[type=submit], button:has-text("Login"), etc.)
         success_url_contains:
           type: string
           description: Optional URL fragment to wait for after login (e.g. "/dashboard"). If omitted, waits for any navigation.
         session_name:
           type: string
           description: Name for this session (default "default"). Use descriptive names like "nurse_manager" or "nurse" when testing multiple roles.
-      required: [url, username_selector, username_value, password_selector, password_value, submit_selector]
+      required: [url, username_value, password_value]
 
   - name: run_script
     description: Execute a custom Playwright JavaScript test script against a URL, optionally using a saved session. The script has access to `page` (Playwright Page, already navigated to url) and `assert(condition, name, actual?)`. All assertions are captured and returned. Auto-screenshots on failure. Use this for complex multi-step flows within a single page load.
