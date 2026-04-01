@@ -47,10 +47,16 @@ export class GeminiAdapter implements LLMAdapter {
       : undefined;
 
     let geminiModel;
+    // Track whether this call is using a cache (affects what we pass to generateContent)
+    let usingCache = false;
 
-    // Attempt context caching only when static block is large enough
+    // Attempt context caching only when static block is large enough.
+    // Tools MUST be baked into the CachedContent — Gemini rejects generateContent
+    // calls that set tools/systemInstruction alongside a cached content reference.
     if (staticSystem.length >= GEMINI_CACHE_MIN_CHARS) {
-      const cacheKey = staticSystem.slice(0, 64);
+      // Cache key = static system prefix + sorted tool names so it invalidates on tool changes
+      const toolSig = params.tools?.map(t => t.name).sort().join(',') ?? '';
+      const cacheKey = `${staticSystem.slice(0, 48)}|${toolSig}`.slice(0, 128);
       const now = Date.now();
       let cachedEntry = this.cacheMap.get(cacheKey);
 
@@ -58,15 +64,16 @@ export class GeminiAdapter implements LLMAdapter {
       if (!cachedEntry || now > cachedEntry.expires - 60_000) {
         try {
           const cache = await this.cacheManager.create({
-            model: `models/${this.model}`,
+            model:             `models/${this.model}`,
             systemInstruction: staticSystem,
-            contents: [],   // required field; cache is system-instruction-only
-            ttlSeconds: 3600,
+            // Tools must be included here — cannot be passed in generateContent when using cache
+            ...(tools ? { tools } : {}),
+            contents:          [],  // required field; content comes per-request
+            ttlSeconds:        3600,
           });
           cachedEntry = { name: cache.name!, expires: now + 3600_000 };
           this.cacheMap.set(cacheKey, cachedEntry);
         } catch (err) {
-          // If cache creation fails (e.g. unsupported model), fall through to uncached path
           console.warn('[Gemini] Context cache creation failed, using uncached path:', err);
           cachedEntry = undefined;
         }
@@ -77,6 +84,7 @@ export class GeminiAdapter implements LLMAdapter {
         geminiModel = this.genAI.getGenerativeModelFromCachedContent(cachedContent, {
           generationConfig: { maxOutputTokens: params.max_tokens ?? 8192 },
         });
+        usingCache = true;
       }
     }
 
@@ -84,17 +92,20 @@ export class GeminiAdapter implements LLMAdapter {
     if (!geminiModel) {
       geminiModel = this.genAI.getGenerativeModel({
         model: this.model,
-        // When system_blocks present, static part already used for cache; use full system as fallback
         ...(params.system ? { systemInstruction: params.system } : {}),
         generationConfig: { maxOutputTokens: params.max_tokens ?? 8192 },
       });
     }
 
+    // When using a cache, tools are already embedded — do NOT pass them again in generateContent
+    // (Gemini returns 400 if tools/systemInstruction are set alongside a cached content reference)
+    const generateTools = usingCache ? undefined : tools;
+
     // Use generateContent directly — avoids SDK chat history validation
     // which incorrectly rejects functionResponse parts in user turns.
     let result = await geminiModel.generateContent({
       contents,
-      ...(tools ? { tools } : {}),
+      ...(generateTools ? { tools: generateTools } : {}),
     });
     let response = result.response;
 
@@ -104,7 +115,7 @@ export class GeminiAdapter implements LLMAdapter {
       console.warn('[Gemini] MALFORMED_FUNCTION_CALL — retrying with tools disabled');
       result = await geminiModel.generateContent({
         contents,
-        ...(tools ? { tools } : {}),
+        ...(generateTools ? { tools: generateTools } : {}),
         toolConfig: { functionCallingConfig: { mode: FunctionCallingMode.NONE } },
       });
       response = result.response;
