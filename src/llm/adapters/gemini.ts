@@ -109,14 +109,16 @@ export class GeminiAdapter implements LLMAdapter {
     });
     let response = result.response;
 
-    // Gemini 2.5 sometimes produces MALFORMED_FUNCTION_CALL — retry with tools disabled
-    // so it generates a text answer from the context it already has.
+    // Gemini 2.5 sometimes produces MALFORMED_FUNCTION_CALL — retry with tools disabled.
+    // When using cached content, toolConfig is also forbidden (same 400 restriction as tools),
+    // so we can only omit generateTools; tools from the cache remain but model usually produces text.
     if ((response.candidates?.[0]?.finishReason as string) === 'MALFORMED_FUNCTION_CALL') {
       console.warn('[Gemini] MALFORMED_FUNCTION_CALL — retrying with tools disabled');
       result = await geminiModel.generateContent({
         contents,
         ...(generateTools ? { tools: generateTools } : {}),
-        toolConfig: { functionCallingConfig: { mode: FunctionCallingMode.NONE } },
+        // Only set toolConfig when NOT using cache — cached content forbids toolConfig in generateContent
+        ...(usingCache ? {} : { toolConfig: { functionCallingConfig: { mode: FunctionCallingMode.NONE } } }),
       });
       response = result.response;
     }
