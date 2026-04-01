@@ -236,6 +236,13 @@ export class WebChatAdapter implements ChannelAdapter {
     this.handlers.push(handler);
   }
 
+  pushEvent(node_id: string, payload: Record<string, unknown>): void {
+    const ws = this.sessions.get(node_id);
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+    }
+  }
+
   async send(message: OutboundMessage): Promise<void> {
     const ws = this.sessions.get(message.node_id);
     if (ws?.readyState === WebSocket.OPEN) {

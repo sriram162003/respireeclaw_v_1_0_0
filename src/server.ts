@@ -4,7 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createChildLogger } from './logger.js';
 import {
-  loadConfig, loadAgents, AURA_DIR, WORKSPACE_DIR,
+  loadConfig, loadAgents, AURA_DIR, WORKSPACE_DIR, TOKENS_DIR,
 } from './config/loader.js';
 import { LLMRouter } from './llm/router.js';
 import { ContextBuilder, lookupSender } from './llm/context.js';
@@ -40,13 +40,40 @@ import type { LLMMessage, ToolCall } from './llm/types.js';
 import type { SkillContext } from './skills/types.js';
 import type { CanvasBlock } from './canvas/types.js';
 import type { SelfWriteArgs } from './skills/self_write.js';
+import { writeTodos } from './skills/todo.js';
+import type { TodoItem } from './skills/todo.js';
 
-const MAX_TOOL_ITERATIONS = 25;
+const MAX_STALL_ITERATIONS = 5; // consecutive tool-failure rounds before giving up
 const START_TIME = Date.now();
 
 const log = createChildLogger('server');
 
-const tokenStats: TokenStats = { total_input: 0, total_output: 0, calls: [] };
+// Load token stats from disk (survive restarts); fall back to empty on missing/corrupt
+function loadTokenStats(): TokenStats {
+  try {
+    const statsFile = path.join(TOKENS_DIR, 'stats.json');
+    if (fs.existsSync(statsFile)) {
+      return JSON.parse(fs.readFileSync(statsFile, 'utf8')) as TokenStats;
+    }
+  } catch { /* start fresh if corrupt */ }
+  return { total_input: 0, total_output: 0, total_cache_creation: 0, total_cache_read: 0, calls: [] };
+}
+
+const tokenStats: TokenStats = loadTokenStats();
+
+// Debounced write — flushes at most once every 5 s under heavy load
+let statsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleStatsSave(): void {
+  if (statsSaveTimer) return;
+  statsSaveTimer = setTimeout(() => {
+    statsSaveTimer = null;
+    try {
+      fs.writeFileSync(path.join(TOKENS_DIR, 'stats.json'), JSON.stringify(tokenStats), 'utf8');
+    } catch (err) {
+      log.warn({ err }, 'Failed to persist token stats');
+    }
+  }, 5_000);
+}
 
 // ── Skills node_modules symlink ───────────────────────────────────────────────
 // Skills live in ~/.aura/skills/ which has no node_modules.
@@ -75,6 +102,15 @@ function ensureSkillsNodeModules(): void {
   } catch (err) {
     log.warn({ err }, 'Could not symlink node_modules');
   }
+}
+
+/** Deduplicate near-identical semantic search results by their opening 80 chars. */
+function dedupeHits(hits: string[]): string[] {
+  const seen = new Set<string>();
+  return hits.filter(h => {
+    const key = h.trim().slice(0, 80).toLowerCase();
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
 }
 
 async function main(): Promise<void> {
@@ -254,6 +290,35 @@ async function main(): Promise<void> {
       description: 'Deduplicate and reorganise the long-term memory profiles, merging redundant facts.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
+    {
+      name: 'new_task',
+      description: 'Call this when the user switches to a clearly different topic or task. Condenses all previous tool outputs so they no longer fill context (text summaries are still kept). Use this before starting unrelated work so stale browser/tool results do not waste context.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'todo_write',
+      description: 'Update the task list. Pass the complete updated list — this replaces the current list. Use this to track multi-step tasks across interruptions. Mark tasks as in_progress when you start them and completed when done. The list is always shown in your context so you can resume after any interruption.',
+      parameters: {
+        type: 'object',
+        properties: {
+          todos: {
+            type: 'array',
+            description: 'The complete task list',
+            items: {
+              type: 'object',
+              properties: {
+                id:       { type: 'string', description: 'Short unique ID, e.g. "1", "2"' },
+                content:  { type: 'string', description: 'Task description' },
+                status:   { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+                priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+              },
+              required: ['id', 'content', 'status', 'priority'],
+            },
+          },
+        },
+        required: ['todos'],
+      },
+    },
   ];
 
   // ── Agent config hot-reload ───────────────────────────────────────────────
@@ -297,13 +362,28 @@ async function main(): Promise<void> {
     const agent   = agentRegistry.resolve(event.node_id);
     const tier    = payload.image_b64 ? 'vision' : agent.llm_tier;
 
-    const shortTerm    = memory.getShortTerm(event.session_id);
-    const semanticHits = await memory.search(agent.memory_ns, payload.text).catch(() => []);
-    const userProfile  = memory.readProfile(agent.memory_ns);
+    const shortTerm     = memory.getShortTerm(event.session_id);
+    // Cap to 5 hits and deduplicate near-identical results to save tokens
+    const rawHits       = await memory.search(agent.memory_ns, payload.text, 5).catch(() => []);
+    const semanticHits  = dedupeHits(rawHits);
+    const userProfile   = memory.readProfile(agent.memory_ns);
     const selfKnowledge = memory.readSelf(agent.memory_ns);
 
-    // Get tools from ALL enabled skills (not just agent-assigned)
-    const skillToolDefs    = skills.getToolDefs([]);
+    // Per-session token limit checks
+    const sessionUsage = memory.getSessionTokenUsage(event.session_id);
+    const sessionTotal = (sessionUsage?.input ?? 0) + (sessionUsage?.output ?? 0);
+    const softLimit    = config.memory?.session_token_soft_limit ?? 50_000;
+    const hardLimit    = config.memory?.session_token_hard_limit ?? 100_000;
+    if (sessionTotal >= hardLimit) {
+      await sendReply(event.node_id, 'This session has reached its token limit. Please start a new conversation.', agent.voice_id);
+      return;
+    }
+
+    // Only load tools for the skills this agent is allowed to use (all if not specified)
+    // Use allowed_skills if set; fall back to skills[] (the existing per-agent skill list);
+    // empty array means load all enabled skills.
+    const skillFilter = agent.allowed_skills ?? (agent.skills?.length ? agent.skills : []);
+    const skillToolDefs    = skills.getToolDefs(skillFilter);
     const rawTools         = [
       ...skillToolDefs,
       selfWriteTool.toolDef,
@@ -322,9 +402,9 @@ async function main(): Promise<void> {
 
     const ctx = buildSkillContext(event, agent.memory_ns);
 
-    // All enabled skills are available — no per-agent filtering needed
+    // List skills loaded for this agent for the system prompt skills summary
     const installedSkills = skills.listSkills()
-      .filter(s => s.enabled)
+      .filter(s => s.enabled && (!skillFilter.length || skillFilter.includes(s.name)))
       .map(s => ({ name: s.name, description: s.description }));
 
     const params = await contextBuilder.build({
@@ -335,19 +415,29 @@ async function main(): Promise<void> {
     });
 
     let messages: LLMMessage[] = params.messages;
-    let iterations = 0;
+    // priorHistoryLen marks the boundary between history and the current turn.
+    // messages[priorHistoryLen - 1] is the current user message (added by contextBuilder).
+    // Everything from that index onward is the current turn's delta (user + tool chain).
+    const priorHistoryLen = messages.length;
+    let stallCount = 0; // consecutive rounds where every tool call failed
 
-    while (iterations < MAX_TOOL_ITERATIONS) {
-      iterations++;
+    while (stallCount < MAX_STALL_ITERATIONS) {
 
       audit.llmCall(event.node_id, agent.memory_ns, tier, tier);
       let response;
       try {
-        response = await llm.complete(tier, {
-          system:     params.system,
+        // Append soft-limit nudge to dynamic context when approaching the session token budget
+      const systemForCall = sessionTotal >= softLimit
+        ? params.system + `\n\n[NOTE: ${sessionTotal.toLocaleString()} tokens used this session. Be concise.]`
+        : params.system;
+
+      response = await llm.complete(tier, {
+          system:          systemForCall,
+          system_blocks:   params.system_blocks,
+          dynamic_context: params.dynamic_context,
           messages,
-          tools:      params.tools,
-          max_tokens: params.max_tokens,
+          tools:           params.tools,
+          max_tokens:      params.max_tokens,
         });
       } catch (err) {
         log.error({ err }, 'LLM error');
@@ -355,23 +445,41 @@ async function main(): Promise<void> {
         return;
       }
 
-      // Accumulate token usage
-      tokenStats.total_input  += response.usage.input_tokens;
-      tokenStats.total_output += response.usage.output_tokens;
+      // Accumulate token usage (global stats)
+      tokenStats.total_input            += response.usage.input_tokens;
+      tokenStats.total_output           += response.usage.output_tokens;
+      tokenStats.total_cache_creation    = (tokenStats.total_cache_creation ?? 0) + (response.usage.cache_creation_tokens ?? 0);
+      tokenStats.total_cache_read        = (tokenStats.total_cache_read      ?? 0) + (response.usage.cache_read_tokens     ?? 0);
       tokenStats.calls.unshift({
-        ts:           Date.now(),
-        node_id:      event.node_id,
+        ts:                    Date.now(),
+        node_id:               event.node_id,
         tier,
-        model:        response.model,
-        input_tokens: response.usage.input_tokens,
-        output_tokens:response.usage.output_tokens,
+        model:                 response.model,
+        input_tokens:          response.usage.input_tokens,
+        output_tokens:         response.usage.output_tokens,
+        cache_creation_tokens: response.usage.cache_creation_tokens,
+        cache_read_tokens:     response.usage.cache_read_tokens,
       } satisfies TokenCallEntry);
       if (tokenStats.calls.length > 200) tokenStats.calls.length = 200;
 
+      // Per-session token tracking
+      memory.recordSessionTokens(event.session_id, {
+        input:          response.usage.input_tokens,
+        output:         response.usage.output_tokens,
+        cache_creation: response.usage.cache_creation_tokens,
+        cache_read:     response.usage.cache_read_tokens,
+      });
+
+      // Persist stats to disk (debounced, at most once per 5 s)
+      scheduleStatsSave();
+
       if (!response.tool_calls || response.tool_calls.length === 0) {
-        // Final text response
-        memory.addTurn(event.session_id, agent.memory_ns, 'user', payload.text);
-        memory.addTurn(event.session_id, agent.memory_ns, 'assistant', response.text);
+        // Final text response — save the complete turn: user msg + tool chain + final assistant text
+        const turnMsgs: LLMMessage[] = [
+          ...messages.slice(priorHistoryLen - 1),               // user msg + any tool chain accumulated
+          { role: 'assistant' as const, content: response.text }, // final answer
+        ];
+        memory.addTurnMessages(event.session_id, agent.memory_ns, turnMsgs);
         const { text: safeText, count } = scanSecrets(response.text);
         if (count > 0) audit.secretRedacted(event.node_id, count);
         await sendReply(event.node_id, safeText, agent.voice_id);
@@ -392,19 +500,24 @@ async function main(): Promise<void> {
       const validCalls = response.tool_calls.filter(call => call.name);
       const hasSequential = validCalls.some(call => SEQUENTIAL_TOOLS.has(call.name));
 
+      let roundHadSuccess = false;
       const execOne = async (call: ToolCall) => {
         audit.toolCall(event.node_id, agent.memory_ns, call.name, JSON.stringify(call.args).slice(0, 200));
+        channels.pushEvent(event.node_id, { type: 'tool_start', id: call.id, name: call.name, args: call.args });
         const t0 = Date.now();
         let result: unknown;
         try {
           result = await executeToolCall(call, ctx, event.session_id);
           audit.toolResult(event.node_id, call.name, true, Date.now() - t0);
           log.debug({ toolName: call.name, durationMs: Date.now() - t0 }, 'Tool executed');
+          roundHadSuccess = true;
+          channels.pushEvent(event.node_id, { type: 'tool_done', id: call.id, ok: true });
         } catch (err) {
           audit.toolResult(event.node_id, call.name, false, Date.now() - t0);
           const errMsg = err instanceof Error ? err.message : String(err);
           log.error({ err: errMsg, toolName: call.name }, 'Tool call failed');
           result = `Error: ${errMsg}`;
+          channels.pushEvent(event.node_id, { type: 'tool_done', id: call.id, ok: false });
         }
         return { role: 'tool' as const, content: JSON.stringify(result), tool_call_id: call.id };
       };
@@ -419,10 +532,17 @@ async function main(): Promise<void> {
         toolResults = await Promise.all(validCalls.map(execOne));
       }
       messages = [...messages, ...toolResults];
+
+      // Reset stall counter on any success; increment only when every tool in this round failed
+      if (roundHadSuccess) {
+        stallCount = 0;
+      } else {
+        stallCount++;
+      }
     }
 
-  log.warn({ nodeId: event.node_id, maxIterations: MAX_TOOL_ITERATIONS }, 'Max iterations reached');
-    await sendReply(event.node_id, 'I\'m having trouble completing this request. Please try rephrasing.', null);
+    log.warn({ nodeId: event.node_id, stallCount, maxStall: MAX_STALL_ITERATIONS }, 'Stall limit reached — all tool calls failing');
+    await sendReply(event.node_id, 'I\'m stuck — every tool call in the last few rounds failed. Please check the setup or rephrase.', null);
   }
 
   function buildSkillContext(event: GatewayEvent, memory_ns: string): SkillContext {
@@ -485,6 +605,16 @@ async function main(): Promise<void> {
     if (call.name === 'consolidate_memory') {
       await extractor.consolidate(ctx.agent_id);
       return 'Memory profiles consolidated and deduplicated.';
+    }
+    if (call.name === 'new_task') {
+      memory.setTopicBoundary(ctx.session_id);
+      return 'Context reset. Previous task tool outputs condensed — text summaries still kept.';
+    }
+    if (call.name === 'todo_write') {
+      const todos = (args['todos'] ?? []) as TodoItem[];
+      writeTodos(ctx.agent_id, todos);
+      channels.pushEvent(ctx.node_id, { type: 'todo_update', todos });
+      return 'Task list updated.';
     }
 
     // Canvas tools

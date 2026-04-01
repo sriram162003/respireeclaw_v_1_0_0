@@ -60,10 +60,19 @@ export class ClaudeAdapter implements LLMAdapter {
       input_schema: t.parameters as Anthropic.Tool['input_schema'],
     }));
 
+    // Use system_blocks for prompt caching when available; add required type:'text' field
+    const systemParam: string | Anthropic.TextBlockParam[] = params.system_blocks
+      ? params.system_blocks.map(b => ({
+          type:          'text' as const,
+          text:          b.text,
+          ...(b.cache_control ? { cache_control: b.cache_control } : {}),
+        }))
+      : params.system;
+
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: params.max_tokens ?? 4096,
-      system: params.system,
+      system: systemParam,
       messages,
       ...(tools && tools.length > 0 ? { tools } : {}),
     });
@@ -88,8 +97,10 @@ export class ClaudeAdapter implements LLMAdapter {
       text,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       usage: {
-        input_tokens:  response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
+        input_tokens:          response.usage.input_tokens,
+        output_tokens:         response.usage.output_tokens,
+        cache_creation_tokens: (response.usage as unknown as Record<string, number>)['cache_creation_input_tokens'] ?? 0,
+        cache_read_tokens:     (response.usage as unknown as Record<string, number>)['cache_read_input_tokens']     ?? 0,
       },
       model:    this.model,
       provider: this.provider,

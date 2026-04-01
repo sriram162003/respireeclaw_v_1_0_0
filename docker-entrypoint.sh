@@ -122,23 +122,45 @@ else
     echo "Configuration found. Starting gateway..."
 fi
 
-# Sync default skills — copy any missing skill files from the image into the volume
+# Sync default skills — copy all skill files from the image into the volume,
+# overwriting existing ones so updates to default-skills/ always take effect on rebuild.
 DEFAULT_SKILLS_DIR="/app/default-skills"
 SKILLS_DIR="$AURA_DIR/skills"
 mkdir -p "$SKILLS_DIR"
 if [ -d "$DEFAULT_SKILLS_DIR" ]; then
     copied=0
+    updated=0
     for src in "$DEFAULT_SKILLS_DIR"/*; do
         fname=$(basename "$src")
         dest="$SKILLS_DIR/$fname"
         if [ ! -f "$dest" ]; then
             cp "$src" "$dest"
             copied=$((copied + 1))
+        elif ! cmp -s "$src" "$dest"; then
+            cp "$src" "$dest"
+            updated=$((updated + 1))
         fi
     done
-    if [ "$copied" -gt 0 ]; then
-        echo "Synced $copied missing skill file(s) to $SKILLS_DIR"
-    fi
+    [ "$copied" -gt 0 ] && echo "Synced $copied new skill file(s) to $SKILLS_DIR"
+    [ "$updated" -gt 0 ] && echo "Updated $updated changed skill file(s) in $SKILLS_DIR"
+    # Remove skills from the volume that no longer exist in default-skills/
+    removed=0
+    for dest in "$SKILLS_DIR"/*; do
+        fname=$(basename "$dest")
+        if [ ! -f "$DEFAULT_SKILLS_DIR/$fname" ]; then
+            rm -f "$dest"
+            removed=$((removed + 1))
+        fi
+    done
+    [ "$removed" -gt 0 ] && echo "Removed $removed obsolete skill file(s) from $SKILLS_DIR"
+fi
+
+# Load API keys from persistent volume (dashboard saves keys here, survives rebuilds)
+if [ -f "/root/.aura/.env" ]; then
+    set -o allexport
+    # shellcheck disable=SC1091
+    source /root/.aura/.env
+    set +o allexport
 fi
 
 # Start the server

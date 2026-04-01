@@ -129,8 +129,11 @@ export class LLMRouter {
         const baseUrl = providerCfg?.base_url ?? 'https://integrate.api.nvidia.com/v1';
         // NVIDIA NIM model strings are org/model (e.g. moonshotai/kimi-k2.5, nvidia/llama-3.1-nemotron-70b-instruct)
         // The router split already stripped the 'nvidia/' provider prefix, so pass model directly.
-        // Disable thinking mode by default — it causes huge latency (30-60s+) with no visible benefit.
-        return new OpenAIAdapter(apiKey, model, baseUrl, { chat_template_kwargs: { thinking: false } });
+        // Only disable thinking mode for models that support it — sending chat_template_kwargs to
+        // non-thinking models (e.g. nemotron, mistral-nemo) causes a 400 error.
+        const isThinkingModel = /kimi|deepseek-r1|qwq|thinking/i.test(model);
+        const extraBody = isThinkingModel ? { chat_template_kwargs: { thinking: false } } : undefined;
+        return new OpenAIAdapter(apiKey, model, baseUrl, extraBody);
       }
       case 'groq': {
         const apiKey = providerCfg?.api_key ?? process.env['GROQ_API_KEY'] ?? '';

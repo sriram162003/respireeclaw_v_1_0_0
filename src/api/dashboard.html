@@ -284,8 +284,9 @@ function buildModelOptions(providers, currentValue) {
   if (ollama?.models?.length) {
     html += `<optgroup label="Ollama (local)">`;
     for (const m of ollama.models) {
-      const val = 'ollama/' + m;
-      if (val !== currentValue) html += `<option value="${val}">${m}</option>`;
+      const val = m.startsWith('ollama/') ? m : 'ollama/' + m;
+      const label = m.startsWith('ollama/') ? m.slice('ollama/'.length) : m;
+      if (val !== currentValue) html += `<option value="${val}">${label}</option>`;
     }
     html += `</optgroup>`;
   }

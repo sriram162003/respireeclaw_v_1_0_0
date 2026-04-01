@@ -42,6 +42,13 @@ tools:
       Step types: webhook, condition, wait, skill, transform, log.
       Example step (webhook): {id: "notify", type: "webhook", url: "https://...", payload: {msg: "{{payload.text}}"}, on_success: "end"}
       Example step (condition): {id: "check", type: "condition", condition: {field: "payload.cpu", operator: "gt", value: 80}, on_true: "alert", on_false: "end"}
+      Example step (skill): {id: "snap", type: "skill", skill_name: "uat_browser", tool_name: "snapshot", params: {session_name: "{{payload.session}}"}, on_success: "next", on_failure: "handle_err"}
+      IMPORTANT for skill steps: field names are skill_name, tool_name, params (NOT skill/tool/args).
+      IMPORTANT for UAT workflows: uat_browser tools return {success:false, error:"..."} on failure without throwing.
+      To detect failures, add a condition step after each skill step:
+        {id: "check_login", type: "condition", condition: {field: "steps.login_step.output.success", operator: "eq", value: "true"}, on_true: "next", on_false: "fail"}
+      NOTE: uat_report.finish_report saves the report to disk from a workflow but cannot send to chat
+      (the workflow REST context has no active channel). After workflow_run completes, call send_report manually.
     parameters:
       type: object
       properties:

@@ -38,6 +38,7 @@ services:
     # resolved by Docker to the correct bridge IP automatically.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    shm_size: 256m
     depends_on:
       - ollama
 

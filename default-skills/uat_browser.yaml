@@ -1,0 +1,393 @@
+name: uat_browser
+version: 1.0.0
+description: |
+  Declarative browser automation for UAT testing. Uses persistent named sessions —
+  open a browser once and reuse it across many tool calls without re-launching.
+
+  TYPICAL FLOW:
+    1. open_browser(session_name, url) — start session
+    2. login(session_name, username, password) — authenticate; session saved to disk
+    3. snapshot(session_name) — see all elements, forms, modals on current page
+    4. click/fill/select_option/check — interact with elements
+    5. wait_for — wait for element, text, URL, or network idle
+    6. take_screenshot — save screenshot silently to workspace
+    7. get_popups / dismiss — handle modals, overlays, toasts
+    8. close_browser — clean up session
+
+  OTP FLOW:
+    After triggering OTP (clicking "Send OTP"), call snapshot to see the OTP field,
+    then ask the user for the code, then fill it in the same session. The session
+    persists while waiting for user input — no re-login needed.
+
+  DEVICE FLOWS:
+    snapshot reveals device dropdowns/tables → select_option or click to pick a device.
+    Use fill for device registration forms, then click submit, then wait_for success text.
+
+executor: uat_browser.ts
+enabled: true
+source: human
+requires_env: []
+
+tools:
+  - name: open_browser
+    description: |
+      Start a named browser session. If a saved session file exists for this name (from a previous login),
+      cookies and localStorage are restored automatically. Call this before any other tool.
+      Kills any existing session with the same name first.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Unique name for this session (e.g. "uat", "nurse_manager", "admin")
+        url:
+          type: string
+          description: Optional URL to navigate to immediately after opening
+        width:
+          type: number
+          description: Viewport width in pixels (default 1280)
+        height:
+          type: number
+          description: Viewport height in pixels (default 800)
+      required: [session_name]
+
+  - name: navigate
+    description: Navigate to a URL in an existing session. Use wait_until="networkidle" for SPAs that load data after the initial HTML.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        url:
+          type: string
+          description: Full URL to navigate to
+        wait_until:
+          type: string
+          enum: [domcontentloaded, networkidle, load]
+          description: When to consider navigation complete (default domcontentloaded)
+      required: [session_name, url]
+
+  - name: login
+    description: |
+      Fill login credentials and submit. Auto-detects username/password/submit fields if selectors not provided.
+      Saves session state (cookies + localStorage) to disk after successful login so it can be restored
+      on next open_browser call. Returns { success, url, error? }.
+      Set throw_on_error=true when using inside a workflow so on_failure routing triggers on login failure.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser (must be navigated to login page first)
+        username:
+          type: string
+          description: Username or email to enter
+        password:
+          type: string
+          description: Password to enter
+        username_selector:
+          type: string
+          description: CSS selector for username field (auto-detected if omitted)
+        password_selector:
+          type: string
+          description: CSS selector for password field (auto-detected if omitted)
+        submit_selector:
+          type: string
+          description: CSS selector for submit button (auto-detected if omitted)
+        success_url:
+          type: string
+          description: URL fragment to wait for after login (e.g. "/dashboard"). Recommended.
+        throw_on_error:
+          type: boolean
+          description: If true, throws an exception on failure (triggers workflow on_failure routing). Default false.
+      required: [session_name, username, password]
+
+  - name: snapshot
+    description: |
+      Get the full interactive state of the current page: all inputs, buttons, dropdowns, checkboxes,
+      modals, toasts/notifications, tables, and a text preview. Use this to discover element selectors
+      before clicking/filling, and to verify page state after actions.
+      Returns: { url, title, inputs[], buttons[], selects[], checkboxes[], modals[], toasts[], tables[], textPreview }
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+      required: [session_name]
+
+  - name: click
+    description: |
+      Click an element. Provide ONE of: selector (CSS), text (visible button/link text), role+text, or aria_label.
+      Waits for element to be visible before clicking. Use index to pick between multiple matches.
+      Returns { clicked, url, error? }. Set throw_on_error=true inside workflows for on_failure routing.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        selector:
+          type: string
+          description: CSS selector (e.g. "#submit-btn", "button.primary", "a[href='/settings']")
+        text:
+          type: string
+          description: Visible text of the element to click (e.g. "Save Changes", "Next")
+        role:
+          type: string
+          description: ARIA role (e.g. "button", "link", "tab", "menuitem")
+        aria_label:
+          type: string
+          description: aria-label attribute value
+        index:
+          type: number
+          description: Which match to use when multiple elements match (0-based, default 0)
+        timeout_ms:
+          type: number
+          description: Max wait time for element to appear (default 10000)
+        throw_on_error:
+          type: boolean
+          description: If true, throws an exception on failure (triggers workflow on_failure routing). Default false.
+      required: [session_name]
+
+  - name: fill
+    description: |
+      Fill an input or textarea. Provide ONE of: selector, placeholder, or label.
+      Clears existing value before filling by default.
+      For OTP fields: use placeholder (e.g. "Enter OTP") or label.
+      Returns { filled, value, error? }. Set throw_on_error=true inside workflows for on_failure routing.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        value:
+          type: string
+          description: Text to type into the field
+        selector:
+          type: string
+          description: CSS selector for the input field
+        placeholder:
+          type: string
+          description: Placeholder text of the input (partial match, case-insensitive)
+        label:
+          type: string
+          description: Label text associated with the input
+        index:
+          type: number
+          description: Which match to use when multiple elements match (default 0)
+        clear_first:
+          type: boolean
+          description: Clear existing value before filling (default true)
+        timeout_ms:
+          type: number
+          description: Max wait time for element to appear (default 10000)
+        throw_on_error:
+          type: boolean
+          description: If true, throws an exception on failure (triggers workflow on_failure routing). Default false.
+      required: [session_name, value]
+
+  - name: select_option
+    description: |
+      Select an option from a dropdown. Works with both native <select> elements and custom
+      React/Vue/Angular dropdowns. For custom dropdowns, provide option_text and the trigger selector.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        option_text:
+          type: string
+          description: Visible text of the option to select (e.g. "Device A", "Singapore")
+        option_value:
+          type: string
+          description: Value attribute of the option (for native <select>)
+        option_index:
+          type: number
+          description: 0-based index of option to select (for native <select>)
+        selector:
+          type: string
+          description: CSS selector for the <select> element or dropdown trigger
+        label:
+          type: string
+          description: Label text for the dropdown (used to locate it)
+        timeout_ms:
+          type: number
+          description: Max wait time (default 10000)
+      required: [session_name]
+
+  - name: check
+    description: Set a checkbox or radio button to checked or unchecked state.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        checked:
+          type: boolean
+          description: true to check, false to uncheck
+        selector:
+          type: string
+          description: CSS selector for the checkbox/radio
+        label:
+          type: string
+          description: Label text for the checkbox/radio
+        timeout_ms:
+          type: number
+          description: Max wait time (default 10000)
+      required: [session_name, checked]
+
+  - name: keyboard
+    description: |
+      Press a keyboard key or type text. Use key for special keys (Enter, Tab, Escape, ArrowDown, etc.),
+      type_text for regular text input. Optionally focus an element first with selector.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        key:
+          type: string
+          description: Playwright key name to press (e.g. "Enter", "Tab", "Escape", "ArrowDown", "Control+a")
+        type_text:
+          type: string
+          description: Text to type character by character (useful for fields that react to each keypress)
+        selector:
+          type: string
+          description: CSS selector to focus before typing
+        timeout_ms:
+          type: number
+          description: Max wait time to focus element (default 10000)
+      required: [session_name]
+
+  - name: wait_for
+    description: |
+      Wait for a condition before proceeding. Types:
+        element_visible — wait for CSS selector to be visible
+        element_hidden  — wait for CSS selector to disappear
+        text_on_page    — wait for text to appear in page body
+        url_contains    — wait for URL to contain a fragment
+        network_idle    — wait for all network requests to finish
+        timeout         — just wait N milliseconds (value = ms)
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        type:
+          type: string
+          enum: [element_visible, element_hidden, text_on_page, url_contains, network_idle, timeout]
+          description: Type of condition to wait for
+        value:
+          type: string
+          description: CSS selector / text string / URL fragment / milliseconds depending on type
+        timeout_ms:
+          type: number
+          description: Max time to wait before giving up (default 15000)
+      required: [session_name, type]
+
+  - name: get_popups
+    description: |
+      List ALL currently visible popups, modals, dialogs, drawers, toasts, and overlays on the page.
+      Returns each popup's type, title, body text, and available action buttons with their text.
+      Call this whenever you see unexpected UI or need to handle a popup before continuing.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+      required: [session_name]
+
+  - name: dismiss
+    description: |
+      Click a button to dismiss the topmost popup/modal. Use ONE of:
+        button_text — click button with this exact text (e.g. "Confirm", "OK", "Cancel")
+        selector    — CSS selector of the button to click
+        action      — "confirm" (clicks OK/Yes/Confirm), "cancel" (clicks Cancel/No), "close" (clicks × or Close)
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        button_text:
+          type: string
+          description: Visible text of button to click inside the popup
+        selector:
+          type: string
+          description: CSS selector of the button to click
+        action:
+          type: string
+          enum: [confirm, cancel, close]
+          description: Semantic action — confirm clicks OK/Yes/Confirm, cancel clicks Cancel/No, close clicks × or Close
+        timeout_ms:
+          type: number
+          description: Max wait time (default 5000)
+      required: [session_name]
+
+  - name: scroll
+    description: Scroll the page or scroll an element into view.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        selector:
+          type: string
+          description: CSS selector — scrolls this element into the viewport
+        direction:
+          type: string
+          enum: [down, up, top, bottom]
+          description: Scroll direction when no selector provided (default down)
+        amount:
+          type: number
+          description: Pixels to scroll (default 300, ignored for top/bottom)
+      required: [session_name]
+
+  - name: take_screenshot
+    description: |
+      Capture a screenshot of the current page state and save it to the workspace.
+      Screenshots are stored silently — NOT sent to chat automatically.
+      Use send_report or manually request them when you want to see them.
+      Returns the filename and path.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name from open_browser
+        filename:
+          type: string
+          description: Custom filename (without path). Defaults to uat_<url-slug>_<timestamp>.png
+        highlight_selector:
+          type: string
+          description: CSS selector of element to highlight with a red outline before screenshotting
+        full_page:
+          type: boolean
+          description: Capture full scrollable page height (default false)
+      required: [session_name]
+
+  - name: close_browser
+    description: Close a named browser session and free memory. Call when done testing.
+    parameters:
+      type: object
+      properties:
+        session_name:
+          type: string
+          description: Session name to close
+      required: [session_name]
+
+  - name: list_sessions
+    description: List all currently active browser sessions with their URLs and connection status.
+    parameters:
+      type: object
+      properties: {}
+      required: []

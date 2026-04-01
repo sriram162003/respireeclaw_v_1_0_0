@@ -5,10 +5,14 @@ export interface LLMAdapter {
 }
 
 export interface LLMParams {
-  system:      string;
-  messages:    LLMMessage[];
-  tools?:      ToolDefinition[];
-  max_tokens?: number;
+  system:           string;
+  /** Claude: split system prompt into cacheable static + dynamic blocks. */
+  system_blocks?:   Array<{ text: string; cache_control?: { type: 'ephemeral' } }>;
+  /** Gemini: dynamic system content injected as a synthetic context message. */
+  dynamic_context?: string;
+  messages:         LLMMessage[];
+  tools?:           ToolDefinition[];
+  max_tokens?:      number;
 }
 
 export interface LLMMessage {
@@ -23,9 +27,14 @@ export interface LLMMessage {
 export interface LLMResponse {
   text:        string;
   tool_calls?: ToolCall[];
-  usage:       { input_tokens: number; output_tokens: number };
-  model:       string;
-  provider:    string;
+  usage: {
+    input_tokens:           number;
+    output_tokens:          number;
+    cache_creation_tokens?: number;
+    cache_read_tokens?:     number;
+  };
+  model:    string;
+  provider: string;
 }
 
 export interface ToolCall {
