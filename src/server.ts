@@ -380,7 +380,10 @@ async function main(): Promise<void> {
     }
 
     // Only load tools for the skills this agent is allowed to use (all if not specified)
-    const skillToolDefs    = skills.getToolDefs(agent.allowed_skills ?? []);
+    // Use allowed_skills if set; fall back to skills[] (the existing per-agent skill list);
+    // empty array means load all enabled skills.
+    const skillFilter = agent.allowed_skills ?? (agent.skills?.length ? agent.skills : []);
+    const skillToolDefs    = skills.getToolDefs(skillFilter);
     const rawTools         = [
       ...skillToolDefs,
       selfWriteTool.toolDef,
@@ -401,7 +404,7 @@ async function main(): Promise<void> {
 
     // List skills loaded for this agent for the system prompt skills summary
     const installedSkills = skills.listSkills()
-      .filter(s => s.enabled && (agent.allowed_skills == null || agent.allowed_skills.includes(s.name)))
+      .filter(s => s.enabled && (!skillFilter.length || skillFilter.includes(s.name)))
       .map(s => ({ name: s.name, description: s.description }));
 
     const params = await contextBuilder.build({
