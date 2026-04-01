@@ -7,6 +7,8 @@ export interface ChannelAdapter {
   send(message: OutboundMessage): Promise<void>;
   /** Optional: show a "typing…" indicator in the channel while the agent processes. */
   sendTyping?(node_id: string): Promise<void>;
+  /** Optional: push a raw event payload to a specific session (browser channels only). */
+  pushEvent?(node_id: string, payload: Record<string, unknown>): void;
   isHealthy(): Promise<boolean>;
   destroy(): Promise<void>;
 }

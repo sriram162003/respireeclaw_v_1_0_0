@@ -34,18 +34,22 @@ export interface HeartbeatLogEntry {
 }
 
 export interface TokenCallEntry {
-  ts:           number;
-  node_id:      string;
-  tier:         string;
-  model:        string;
-  input_tokens: number;
-  output_tokens:number;
+  ts:                     number;
+  node_id:                string;
+  tier:                   string;
+  model:                  string;
+  input_tokens:           number;
+  output_tokens:          number;
+  cache_creation_tokens?: number;
+  cache_read_tokens?:     number;
 }
 
 export interface TokenStats {
-  total_input:  number;
-  total_output: number;
-  calls:        TokenCallEntry[];
+  total_input:           number;
+  total_output:          number;
+  total_cache_creation?: number;
+  total_cache_read?:     number;
+  calls:                 TokenCallEntry[];
 }
 
 // In-memory workflow state store for dashboard2 (with SQLite persistence)
@@ -273,6 +277,58 @@ const WF3_TEMPLATES = [
         { id: 'send', type: 'webhook', url: '{{payload.report_url}}', payload: { report: '{{steps.format.output.report}}', at: '{{steps.format.output.generated_at}}' }, on_success: 'end' },
         { id: 'end', type: 'log', message: 'Report sent.' },
         { id: 'fail', type: 'log', message: 'Report collection failed: {{steps.collect.output.error}}' },
+      ],
+    },
+  },
+  // ── UAT Testing Templates ─────────────────────────────────────────────────
+  {
+    id: 'uat_login_test', name: 'UAT — Login Test',
+    description: 'Test login flow against UAT environment. Payload: { url, username, password, success_url, scenario_id, scenario_title }',
+    definition: {
+      name: 'uat-login-test',
+      description: 'Automated UAT login test. Opens browser, logs in, takes screenshot, records result. Payload required: url, username, password, success_url.',
+      trigger: { type: 'manual' },
+      steps: [
+        { id: 'start_report', type: 'skill', skill_name: 'uat_report', tool_name: 'start_report', params: { scenario_id: '{{payload.scenario_id}}', scenario_title: '{{payload.scenario_title}}', user_role: '{{payload.user_role}}' }, on_success: 'open_browser', on_failure: 'fail_log' },
+        { id: 'open_browser', type: 'skill', skill_name: 'uat_browser', tool_name: 'open_browser', params: { session_name: 'uat_wf', url: '{{payload.url}}' }, on_success: 'login', on_failure: 'record_open_fail' },
+        { id: 'login', type: 'skill', skill_name: 'uat_browser', tool_name: 'login', params: { session_name: 'uat_wf', username: '{{payload.username}}', password: '{{payload.password}}', success_url: '{{payload.success_url}}', throw_on_error: true }, on_success: 'screenshot_ok', on_failure: 'record_login_fail' },
+        { id: 'screenshot_ok', type: 'skill', skill_name: 'uat_browser', tool_name: 'take_screenshot', params: { session_name: 'uat_wf', filename: 'login_pass.png' }, on_success: 'record_login_pass', on_failure: 'record_login_pass' },
+        { id: 'record_login_pass', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 1, description: 'Login with valid credentials', passed: true, actual: 'Successfully navigated to {{steps.login.output.url}}', screenshot_filename: 'login_pass.png' }, on_success: 'finish_pass', on_failure: 'fail_log' },
+        { id: 'finish_pass', type: 'skill', skill_name: 'uat_report', tool_name: 'finish_report', params: { report_id: '{{steps.start_report.output.report_id}}', overall_result: 'PASS' }, on_success: 'close_browser', on_failure: 'close_browser' },
+        { id: 'record_open_fail', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 1, description: 'Open browser and navigate to login page', passed: false, actual: '{{steps.open_browser.output.error}}' }, on_success: 'finish_fail', on_failure: 'fail_log' },
+        { id: 'record_login_fail', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 1, description: 'Login with valid credentials', passed: false, actual: '{{steps.login.output.error}}' }, on_success: 'screenshot_fail', on_failure: 'finish_fail' },
+        { id: 'screenshot_fail', type: 'skill', skill_name: 'uat_browser', tool_name: 'take_screenshot', params: { session_name: 'uat_wf', filename: 'login_fail.png' }, on_success: 'finish_fail', on_failure: 'finish_fail' },
+        { id: 'finish_fail', type: 'skill', skill_name: 'uat_report', tool_name: 'finish_report', params: { report_id: '{{steps.start_report.output.report_id}}', overall_result: 'FAIL' }, on_success: 'close_browser', on_failure: 'close_browser' },
+        { id: 'close_browser', type: 'skill', skill_name: 'uat_browser', tool_name: 'close_browser', params: { session_name: 'uat_wf' }, on_success: 'end', on_failure: 'end' },
+        { id: 'end', type: 'log', message: 'UAT login test complete. report_id={{steps.start_report.output.report_id}}' },
+        { id: 'fail_log', type: 'log', message: 'Workflow setup failed — could not start report or close browser.' },
+      ],
+    },
+  },
+  {
+    id: 'uat_smoke_test', name: 'UAT — Smoke Test (Login + Snapshot)',
+    description: 'Login and snapshot key pages to verify they load. Payload: { url, username, password, success_url }',
+    definition: {
+      name: 'uat-smoke-test',
+      description: 'Login and snapshot key pages to verify they load. Per-step results recorded. Payload: url, username, password, success_url.',
+      trigger: { type: 'manual' },
+      steps: [
+        { id: 'start_report', type: 'skill', skill_name: 'uat_report', tool_name: 'start_report', params: { scenario_id: 'SMOKE_01', scenario_title: 'Smoke Test — Login and Pages Load', severity: 'Severity 1' }, on_success: 'open_browser', on_failure: 'fail_log' },
+        { id: 'open_browser', type: 'skill', skill_name: 'uat_browser', tool_name: 'open_browser', params: { session_name: 'smoke', url: '{{payload.url}}' }, on_success: 'login', on_failure: 'fail_log' },
+        { id: 'login', type: 'skill', skill_name: 'uat_browser', tool_name: 'login', params: { session_name: 'smoke', username: '{{payload.username}}', password: '{{payload.password}}', success_url: '{{payload.success_url}}', throw_on_error: true }, on_success: 'screenshot_login', on_failure: 'record_login_fail' },
+        { id: 'screenshot_login', type: 'skill', skill_name: 'uat_browser', tool_name: 'take_screenshot', params: { session_name: 'smoke', filename: 'smoke_step1_login.png' }, on_success: 'record_step1', on_failure: 'record_step1' },
+        { id: 'record_step1', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 1, description: 'Login with valid credentials', passed: true, actual: 'Logged in, URL: {{steps.login.output.url}}', screenshot_filename: 'smoke_step1_login.png' }, on_success: 'snapshot_home', on_failure: 'finish_fail' },
+        { id: 'snapshot_home', type: 'skill', skill_name: 'uat_browser', tool_name: 'snapshot', params: { session_name: 'smoke' }, on_success: 'check_home_loaded', on_failure: 'record_step2_fail' },
+        { id: 'check_home_loaded', type: 'condition', condition: { field: 'steps.snapshot_home.output.url', operator: 'exists' }, on_true: 'screenshot_home', on_false: 'record_step2_fail' },
+        { id: 'screenshot_home', type: 'skill', skill_name: 'uat_browser', tool_name: 'take_screenshot', params: { session_name: 'smoke', filename: 'smoke_step2_home.png' }, on_success: 'record_step2', on_failure: 'record_step2' },
+        { id: 'record_step2', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 2, description: 'Home page loads after login', passed: true, actual: 'Page loaded: {{steps.snapshot_home.output.title}}', screenshot_filename: 'smoke_step2_home.png' }, on_success: 'finish_pass', on_failure: 'finish_pass' },
+        { id: 'record_login_fail', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 1, description: 'Login with valid credentials', passed: false, actual: '{{steps.login.output.error}}' }, on_success: 'finish_fail', on_failure: 'finish_fail' },
+        { id: 'record_step2_fail', type: 'skill', skill_name: 'uat_report', tool_name: 'record_step', params: { report_id: '{{steps.start_report.output.report_id}}', step_number: 2, description: 'Home page loads after login', passed: false, actual: 'Snapshot failed or URL missing' }, on_success: 'finish_fail', on_failure: 'finish_fail' },
+        { id: 'finish_pass', type: 'skill', skill_name: 'uat_report', tool_name: 'finish_report', params: { report_id: '{{steps.start_report.output.report_id}}', overall_result: 'PASS', comments: 'Smoke test complete. Call send_report to view screenshots.' }, on_success: 'close_browser', on_failure: 'close_browser' },
+        { id: 'finish_fail', type: 'skill', skill_name: 'uat_report', tool_name: 'finish_report', params: { report_id: '{{steps.start_report.output.report_id}}', overall_result: 'FAIL' }, on_success: 'close_browser', on_failure: 'close_browser' },
+        { id: 'close_browser', type: 'skill', skill_name: 'uat_browser', tool_name: 'close_browser', params: { session_name: 'smoke' }, on_success: 'end', on_failure: 'end' },
+        { id: 'end', type: 'log', message: 'Smoke test done. report_id={{steps.start_report.output.report_id}}. Call uat_report.send_report to view results in chat.' },
+        { id: 'fail_log', type: 'log', message: 'Workflow setup failed before report could be created.' },
       ],
     },
   },
@@ -703,7 +759,7 @@ export class RestAPI {
         const defaultModels: Record<string, string[]> = {
           claude:     ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4'],
           openai:     ['gpt-4o', 'gpt-4o-mini'],
-          gemini:     ['gemini-1.5-pro', 'gemini-1.5-flash'],
+          gemini:     ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-lite'],
           mistral:    ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b'],
           openrouter: ['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'meta-llama/llama-3.1-70b-instruct'],
           nvidia:     ['nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/llama-3.1-nemotron-nano-8b-v1', 'nvidia/moonshotai/kimi-k2.5', 'nvidia/mistralai/mistral-nemo-12b-instruct'],
@@ -745,7 +801,8 @@ export class RestAPI {
       if (method === 'GET' && path.startsWith('/api/llm/models')) {
         const provider = new URL('http://x' + (req.url ?? path)).searchParams.get('provider')
           ?? path.split('/').pop() ?? '';
-        const PROVIDER_META: Record<string, { baseUrl: string; envKey: string; prefix?: string }> = {
+        const PROVIDER_META: Record<string, { baseUrl: string; envKey: string; prefix?: string; authHeader?: string }> = {
+          openai:     { baseUrl: 'https://api.openai.com/v1',           envKey: 'OPENAI_API_KEY' },
           nvidia:     { baseUrl: 'https://integrate.api.nvidia.com/v1', envKey: 'NVIDIA_API_KEY', prefix: 'nvidia/' },
           groq:       { baseUrl: 'https://api.groq.com/openai/v1',      envKey: 'GROQ_API_KEY',   prefix: 'groq/' },
           deepseek:   { baseUrl: 'https://api.deepseek.com/v1',         envKey: 'DEEPSEEK_API_KEY', prefix: 'deepseek/' },
@@ -756,6 +813,41 @@ export class RestAPI {
           ollama:     { baseUrl: process.env['OLLAMA_BASE_URL'] ?? 'http://ollama:11434', envKey: '', prefix: 'ollama/' },
         };
         const meta = PROVIDER_META[provider];
+
+        // Gemini uses a different auth scheme (query param) and response format
+        if (provider === 'gemini') {
+          const apiKey = process.env['GOOGLE_API_KEY'] ?? '';
+          if (!apiKey) return this.json(res, 400, { error: 'GOOGLE_API_KEY not set' });
+          try {
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            if (!resp.ok) return this.json(res, 502, { error: `Gemini returned ${resp.status}` });
+            const data = await resp.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
+            const ids = (data.models ?? [])
+              .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+              .map(m => m.name.replace('models/', ''));
+            return this.json(res, 200, { provider, models: ids });
+          } catch (err) {
+            return this.json(res, 502, { error: String(err) });
+          }
+        }
+
+        // Claude uses x-api-key header
+        if (provider === 'claude') {
+          const apiKey = process.env['ANTHROPIC_API_KEY'] ?? '';
+          if (!apiKey) return this.json(res, 400, { error: 'ANTHROPIC_API_KEY not set' });
+          try {
+            const resp = await fetch('https://api.anthropic.com/v1/models', {
+              headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            });
+            if (!resp.ok) return this.json(res, 502, { error: `Anthropic returned ${resp.status}` });
+            const data = await resp.json() as { data?: Array<{ id: string }> };
+            const ids = (data.data ?? []).map(m => m.id);
+            return this.json(res, 200, { provider, models: ids });
+          } catch (err) {
+            return this.json(res, 502, { error: String(err) });
+          }
+        }
+
         if (!meta) return this.json(res, 400, { error: `Unknown provider: ${provider}` });
         const apiKey = meta.envKey ? (process.env[meta.envKey] ?? '') : '';
         if (meta.envKey && !apiKey) return this.json(res, 400, { error: `${meta.envKey} not set` });
@@ -823,8 +915,8 @@ export class RestAPI {
           const envVar = ENV_VARS[api_key.provider];
           if (!envVar) return this.json(res, 400, { error: 'Unknown provider' });
 
-          // Write to .env file for persistence
-          const envPath = nodePath.join(process.cwd(), '.env');
+          // Write to .env file on persistent volume so keys survive container rebuilds
+          const envPath = nodePath.join(os.homedir(), '.aura', '.env');
           let envContent = '';
           try { envContent = fs.readFileSync(envPath, 'utf8'); } catch { /* new file */ }
           const lines = envContent.split('\n').filter(l => !l.startsWith(`${envVar}=`));
@@ -845,7 +937,27 @@ export class RestAPI {
 
       // --- Token usage ---
       if (method === 'GET' && path === '/api/usage') {
-        return this.json(res, 200, this.params.tokenStats);
+        const stats = this.params.tokenStats;
+        const totalBillable = (stats.total_input ?? 0) + (stats.total_cache_creation ?? 0);
+        const cacheHitTokens = stats.total_cache_read ?? 0;
+        const cacheSavingsPct = totalBillable + cacheHitTokens > 0
+          ? Math.round(cacheHitTokens / (totalBillable + cacheHitTokens) * 100)
+          : 0;
+        return this.json(res, 200, { ...stats, cache_savings_pct: cacheSavingsPct });
+      }
+
+      // All active sessions with per-session token usage
+      if (method === 'GET' && path === '/api/usage/sessions') {
+        return this.json(res, 200, this.params.memoryManager.getAllSessionTokenUsage());
+      }
+
+      // Single session by node_id/session_id query param
+      if (method === 'GET' && path === '/api/usage/session') {
+        const session_id = url.searchParams.get('session_id') ?? url.searchParams.get('node_id');
+        if (!session_id) return this.json(res, 400, { error: 'session_id or node_id param required' });
+        const usage = this.params.memoryManager.getSessionTokenUsage(session_id);
+        if (!usage) return this.json(res, 404, { error: 'session not found or no token data yet' });
+        return this.json(res, 200, { session_id, ...usage });
       }
 
       // --- Browser screenshots ---

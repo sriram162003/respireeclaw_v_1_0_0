@@ -21,8 +21,12 @@ export class MemoryManager {
   private profiles:  ProfileMemory;
   private vector!:   VectorMemory;
 
-  constructor(_config: GatewayConfig) {
-    this.shortTerm = new ShortTermMemory();
+  constructor(config: GatewayConfig) {
+    const mem = (config as unknown as { memory?: { max_turns?: number; session_ttl_hours?: number } }).memory;
+    this.shortTerm = new ShortTermMemory({
+      maxTurns:     mem?.max_turns ?? 30,
+      sessionTtlMs: (mem?.session_ttl_hours ?? 2) * 3600_000,
+    });
     this.episodic  = new EpisodicMemory();
     this.profiles  = new ProfileMemory();
   }
@@ -39,12 +43,32 @@ export class MemoryManager {
     this.shortTerm.addTurn(session_id, role, content);
   }
 
+  addTurnMessages(session_id: string, _agent_ns: string, msgs: LLMMessage[]): void {
+    this.shortTerm.addTurnMessages(session_id, msgs);
+  }
+
+  setTopicBoundary(session_id: string): void {
+    this.shortTerm.setTopicBoundary(session_id);
+  }
+
   getShortTerm(session_id: string): LLMMessage[] {
     return this.shortTerm.get(session_id);
   }
 
   cleanupSessions(): void {
     this.shortTerm.cleanup();
+  }
+
+  recordSessionTokens(session_id: string, usage: { input: number; output: number; cache_creation?: number; cache_read?: number }): void {
+    this.shortTerm.recordTokens(session_id, usage);
+  }
+
+  getSessionTokenUsage(session_id: string): { input: number; output: number; cache_creation: number; cache_read: number; calls: number } | null {
+    return this.shortTerm.getTokenUsage(session_id);
+  }
+
+  getAllSessionTokenUsage(): Record<string, { input: number; output: number; cache_creation: number; cache_read: number; calls: number }> {
+    return this.shortTerm.getAllTokenUsage();
   }
 
   // ── Episodic ──────────────────────────────────────────────────────────────
@@ -67,8 +91,8 @@ export class MemoryManager {
     this.semantic.index(agent_ns, date, content);
   }
 
-  async search(agent_ns: string, query: string): Promise<string[]> {
-    return this.semantic.search(agent_ns, query);
+  async search(agent_ns: string, query: string, limit?: number): Promise<string[]> {
+    return this.semantic.search(agent_ns, query, limit);
   }
 
   // ── Reminders ─────────────────────────────────────────────────────────────

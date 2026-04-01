@@ -1,0 +1,134 @@
+name: uat_report
+version: 1.0.0
+description: |
+  Structured test reporting for UAT scenario execution. Records step-by-step results
+  and generates TSD-style markdown reports. Screenshots are stored silently and sent only on demand.
+
+  WORKFLOW:
+    1. start_report(scenario_id, scenario_title) — initialize report, get report_id
+    2. After each test step: record_step(report_id, step_number, description, passed, actual, screenshot_filename)
+    3. finish_report(report_id) — calculate overall result and send text report to chat
+    4. (optional) send_report(report_id, screenshots="all"|"failed") — send screenshots on demand
+
+  PASSED VALUES:
+    true  = step passed
+    false = step failed
+    null  = step skipped or awaiting user input (e.g. OTP step)
+
+executor: uat_report.ts
+enabled: true
+source: human
+requires_env: []
+
+tools:
+  - name: start_report
+    description: |
+      Initialize a new UAT scenario report. Call before executing any test steps.
+      Returns a report_id to pass to all subsequent record_step and finish_report calls.
+    parameters:
+      type: object
+      properties:
+        scenario_id:
+          type: string
+          description: TSD scenario identifier (e.g. "TSD_A01_01", "SMOKE_LOGIN")
+        scenario_title:
+          type: string
+          description: Human-readable scenario title (e.g. "Login with OTP", "Register Device")
+        severity:
+          type: string
+          description: Severity level (e.g. "Severity 1 – Go Live Critical", "Severity 2")
+        user_role:
+          type: string
+          description: User role being tested (e.g. "Nurse Manager", "Admin", "Nurse")
+      required: [scenario_id, scenario_title]
+
+  - name: record_step
+    description: |
+      Record the result of one test step. Call after each action or verification.
+      passed=true for PASS, passed=false for FAIL, passed=null for SKIP (e.g. OTP awaiting input).
+      include screenshot_filename from uat_browser.take_screenshot if available.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id returned by start_report
+        step_number:
+          type: number
+          description: Step number (1, 2, 3, …)
+        description:
+          type: string
+          description: What was done in this step
+        passed:
+          type: boolean
+          description: "true=PASS, false=FAIL, null=SKIP/awaiting-input"
+          nullable: true
+        expected:
+          type: string
+          description: Expected result (from TSD document)
+        actual:
+          type: string
+          description: What actually happened (URL navigated to, message shown, error seen)
+        screenshot_filename:
+          type: string
+          description: Filename from uat_browser.take_screenshot (stored in workspace, NOT auto-sent)
+        notes:
+          type: string
+          description: Additional observations or context
+      required: [report_id, step_number, description, passed]
+
+  - name: finish_report
+    description: |
+      Finalize the report. Auto-calculates PASS/FAIL from step results (PASS only if all steps passed).
+      Sends the formatted markdown text report to chat. Screenshots are NOT attached — use send_report separately.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id from start_report
+        overall_result:
+          type: string
+          enum: [PASS, FAIL]
+          description: Override the auto-calculated overall result
+        comments:
+          type: string
+          description: Overall comments to include at the bottom of the report
+      required: [report_id]
+
+  - name: get_report
+    description: Get the current state of a report including formatted markdown preview. Use to check progress mid-scenario or retrieve a completed report without re-sending it to chat.
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id to retrieve
+      required: [report_id]
+
+  - name: list_reports
+    description: List all saved UAT reports with summary (pass/fail counts, overall result). Optionally filter by scenario_id.
+    parameters:
+      type: object
+      properties:
+        scenario_id:
+          type: string
+          description: Optional filter — only return reports for this scenario ID
+      required: []
+
+  - name: send_report
+    description: |
+      Send a report to chat, optionally including screenshots. Use this to view results on demand.
+      screenshots="all" sends all step screenshots, "failed" sends only failed step screenshots, "none" sends text only.
+      Screenshots are batched automatically (5 per message).
+    parameters:
+      type: object
+      properties:
+        report_id:
+          type: string
+          description: The report_id to send (use list_reports to find one)
+        screenshots:
+          type: string
+          enum: [all, failed, none]
+          description: Which screenshots to attach. Default is "none" (text report only).
+      required: [report_id]

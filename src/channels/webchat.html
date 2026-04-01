@@ -374,6 +374,58 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .tok-out{color:var(--teal);font-variant-numeric:tabular-nums}
 .tok-model{font-family:var(--mono);font-size:11px;color:var(--text-dim)}
 
+/* ── Tool call blocks (inline in chat) ──────────────────────────── */
+#tool-stream{display:flex;flex-direction:column;gap:4px;padding:2px 18px 6px;align-self:stretch}
+.tool-block{
+  display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);overflow:hidden;
+  animation:fadeUp .15s ease;
+  align-self:flex-start;max-width:520px;min-width:180px;
+}
+.tool-block-hdr{
+  display:flex;align-items:center;gap:7px;padding:6px 10px;
+  cursor:pointer;user-select:none;transition:background .15s;
+}
+.tool-block-hdr:hover{background:var(--surface2)}
+.tool-icon{width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.tool-icon.running svg{animation:spin 1s linear infinite;transform-origin:center}
+.tool-icon.ok{color:var(--teal)}
+.tool-icon.err{color:var(--red)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tool-name-lbl{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text-dim);flex:1}
+.tool-toggle-arrow{font-size:9px;color:var(--text-faint);transition:transform .15s;line-height:1}
+.tool-toggle-arrow.open{transform:rotate(180deg)}
+.tool-block-body{display:none;padding:0 10px 8px;border-top:1px solid var(--border)}
+.tool-block-body.open{display:block}
+.tool-args-pre{font-family:var(--mono);font-size:11px;color:var(--text-faint);white-space:pre-wrap;word-break:break-all;padding-top:7px;line-height:1.5}
+
+/* ── Tasks panel ────────────────────────────────────────────────── */
+.todo-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.todo-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 14px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);animation:fadeUp .2s ease;transition:border-color .2s;
+}
+.todo-item.s-completed{opacity:.5}
+.todo-item.s-completed .todo-content{text-decoration:line-through;color:var(--text-faint)}
+.todo-item.s-in_progress{border-color:rgba(124,106,245,.35)}
+.todo-icon{flex-shrink:0;width:16px;height:16px;display:flex;align-items:center;justify-content:center;color:var(--text-faint);margin-top:2px}
+.todo-icon.running svg{animation:spin 1.4s linear infinite;transform-origin:center;color:var(--accent)}
+.todo-icon.done{color:var(--teal)}
+.todo-content{flex:1;font-size:13px;line-height:1.5}
+.todo-priority{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;flex-shrink:0;align-self:flex-start;margin-top:2px;letter-spacing:.03em}
+.todo-priority.high{background:rgba(255,85,102,.12);color:var(--red);border:1px solid rgba(255,85,102,.2)}
+.todo-priority.low{background:var(--surface2);color:var(--text-faint);border:1px solid var(--border)}
+.nav-item{position:relative}
+.nav-badge{
+  position:absolute;top:5px;right:5px;
+  min-width:14px;height:14px;border-radius:7px;
+  background:var(--accent);color:#fff;font-size:9px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 3px;line-height:1;pointer-events:none;
+}
+
 /* ── Mobile ──────────────────────────────────────────────────────── */
 @media(max-width:680px){
   #app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}
@@ -439,6 +491,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
       </svg>
       Usage
+    </div>
+
+    <div class="nav-item" data-panel="tasks" onclick="showPanel('tasks')" title="Tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      Tasks
     </div>
 
     <div class="nav-spacer"></div>
@@ -579,7 +638,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
     <div id="panel-usage" class="panel">
       <div class="panel-hdr">
         <div class="panel-title">Token Usage</div>
-        <div class="panel-sub">Cumulative LLM token consumption since gateway start</div>
+        <div class="panel-sub">Cumulative LLM token consumption — persisted across restarts</div>
       </div>
       <div class="panel-body">
         <div id="usage-error" class="error-state" style="display:none">
@@ -589,16 +648,40 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="stat-grid">
           <div class="stat-card"><div class="stat-label">Total Input</div><div class="stat-value accent" id="stat-tok-in">—</div></div>
           <div class="stat-card"><div class="stat-label">Total Output</div><div class="stat-value teal" id="stat-tok-out">—</div></div>
-          <div class="stat-card"><div class="stat-label">Total Tokens</div><div class="stat-value" id="stat-tok-total">—</div></div>
+          <div class="stat-card"><div class="stat-label">Cache Created</div><div class="stat-value" id="stat-tok-cache-create">—</div></div>
+          <div class="stat-card"><div class="stat-label">Cache Hits</div><div class="stat-value teal" id="stat-tok-cache-read">—</div></div>
+          <div class="stat-card"><div class="stat-label">Cache Savings</div><div class="stat-value accent" id="stat-tok-cache-pct">—</div></div>
           <div class="stat-card"><div class="stat-label">LLM Calls</div><div class="stat-value" id="stat-tok-calls">—</div></div>
         </div>
         <div class="section-title">Recent LLM Calls</div>
         <div class="usage-table-wrap">
           <table class="usage-table">
-            <thead><tr><th>Time</th><th>Tier</th><th>Model</th><th>In</th><th>Out</th></tr></thead>
-            <tbody id="usage-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px">No calls yet</td></tr></tbody>
+            <thead><tr><th>Time</th><th>Tier</th><th>Model</th><th>In</th><th>Out</th><th>Cache+</th><th>Cache Hit</th></tr></thead>
+            <tbody id="usage-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:18px">No calls yet</td></tr></tbody>
           </table>
         </div>
+        <div class="section-title" style="margin-top:18px">Active Sessions</div>
+        <div class="usage-table-wrap">
+          <table class="usage-table">
+            <thead><tr><th>Session</th><th>Calls</th><th>Input</th><th>Output</th><th>Cache Hit</th></tr></thead>
+            <tbody id="sessions-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px">No active sessions</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tasks ────────────────────────────────────────────────── -->
+    <div id="panel-tasks" class="panel">
+      <div class="panel-hdr">
+        <div class="panel-title">Tasks</div>
+        <div class="panel-sub">Agent's live task list — updated automatically as work progresses</div>
+      </div>
+      <div class="panel-body">
+        <div id="tasks-empty" class="empty-state">
+          <div class="empty-icon">✓</div>
+          No tasks yet — ask the agent to work on something complex!
+        </div>
+        <div class="todo-list" id="todo-list"></div>
       </div>
     </div>
 
@@ -668,6 +751,7 @@ const PANEL_LOADERS={
   skills:loadSkills,
   status:loadStatus,
   usage:loadUsage,
+  tasks:()=>renderTodos(currentTodos),
 };
 
 function showPanel(name){
@@ -718,6 +802,12 @@ function connect(){
         appendMsg('agent',msg.text||'',msg.attachments||[]);
         enableInput();
         if(currentPanel==='usage')loadUsage();
+      }else if(msg.type==='tool_start'){
+        onToolStart(msg);
+      }else if(msg.type==='tool_done'){
+        onToolDone(msg);
+      }else if(msg.type==='todo_update'){
+        onTodoUpdate(msg.todos||[]);
       }
     }catch{}
   };
@@ -864,6 +954,7 @@ function sendMsg(){
       :{type:'document',url:'#',filename:f.name}
   );
   appendMsg('user',text,previewAtts);
+  toolStreamEl=null;
 
   inp.value='';inp.style.height='';
   showTyping();disableInput();
@@ -1102,33 +1193,166 @@ async function loadUsage(){
   const errMsg=document.getElementById('usage-error-msg');
   errEl.style.display='none';
   try{
-    const data=await api('/api/usage');
+    const [data, sessions]=await Promise.all([api('/api/usage'), api('/api/usage/sessions').catch(()=>({}))]);
     const totalIn=data.total_input??0;
     const totalOut=data.total_output??0;
+    const cacheCreate=data.total_cache_creation??0;
+    const cacheRead=data.total_cache_read??0;
+    const cachePct=data.cache_savings_pct??0;
+
     document.getElementById('stat-tok-in').textContent=fmtTok(totalIn);
     document.getElementById('stat-tok-out').textContent=fmtTok(totalOut);
-    document.getElementById('stat-tok-total').textContent=fmtTok(totalIn+totalOut);
+    document.getElementById('stat-tok-cache-create').textContent=fmtTok(cacheCreate);
+    document.getElementById('stat-tok-cache-read').textContent=fmtTok(cacheRead);
+    document.getElementById('stat-tok-cache-pct').textContent=cachePct+'%';
     document.getElementById('stat-tok-calls').textContent=data.calls?.length??0;
 
+    // Recent calls table
     const tbody=document.getElementById('usage-tbody');
     const calls=(data.calls||[]).slice(0,50);
     if(!calls.length){
-      tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px">No calls yet</td></tr>';
-      return;
+      tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:18px">No calls yet</td></tr>';
+    } else {
+      tbody.innerHTML=calls.map(c=>{
+        const ts=new Date(c.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        const cacheCreateTok=c.cache_creation_tokens??0;
+        const cacheReadTok=c.cache_read_tokens??0;
+        return`<tr>
+          <td style="color:var(--text-faint);font-size:11px">${esc(ts)}</td>
+          <td style="font-size:11px">${esc(c.tier||'—')}</td>
+          <td class="tok-model">${esc((c.model||'—').slice(0,30))}</td>
+          <td class="tok-in">${fmtTok(c.input_tokens??0)}</td>
+          <td class="tok-out">${fmtTok(c.output_tokens??0)}</td>
+          <td style="font-size:11px;color:var(--text-faint)">${cacheCreateTok>0?fmtTok(cacheCreateTok):'—'}</td>
+          <td style="font-size:11px;color:var(--teal,#4ec9b0)">${cacheReadTok>0?fmtTok(cacheReadTok):'—'}</td>
+        </tr>`;
+      }).join('');
     }
-    tbody.innerHTML=calls.map(c=>{
-      const ts=new Date(c.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      return`<tr>
-        <td style="color:var(--text-faint);font-size:11px">${esc(ts)}</td>
-        <td style="font-size:11px">${esc(c.tier||'—')}</td>
-        <td class="tok-model">${esc((c.model||'—').slice(0,30))}</td>
-        <td class="tok-in">${fmtTok(c.input_tokens??0)}</td>
-        <td class="tok-out">${fmtTok(c.output_tokens??0)}</td>
-      </tr>`;
-    }).join('');
+
+    // Active sessions table
+    const stbody=document.getElementById('sessions-tbody');
+    const sessionEntries=Object.entries(sessions||{});
+    if(!sessionEntries.length){
+      stbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px">No active sessions</td></tr>';
+    } else {
+      stbody.innerHTML=sessionEntries.map(([sid,u])=>`<tr>
+        <td style="font-size:11px;font-family:monospace">${esc(sid)}</td>
+        <td style="font-size:11px">${u.calls}</td>
+        <td class="tok-in">${fmtTok(u.input??0)}</td>
+        <td class="tok-out">${fmtTok(u.output??0)}</td>
+        <td style="font-size:11px;color:var(--teal,#4ec9b0)">${u.cache_read>0?fmtTok(u.cache_read):'—'}</td>
+      </tr>`).join('');
+    }
   }catch(err){
     errEl.style.display='flex';
     errMsg.textContent='Failed to load usage: '+err.message;
+  }
+}
+
+// ── Tool call stream (inline in chat) ─────────────────────────────────────
+let toolStreamEl=null;
+
+function ensureToolStream(){
+  if(!toolStreamEl){
+    toolStreamEl=document.createElement('div');
+    toolStreamEl.id='tool-stream';
+    $msgs.appendChild(toolStreamEl);
+  }
+  return toolStreamEl;
+}
+
+const SVG_SPIN='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
+const SVG_CHECK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const SVG_CROSS='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+function onToolStart(msg){
+  const stream=ensureToolStream();
+  let argsText='';
+  try{
+    const a=msg.args||{};
+    const entries=Object.entries(a).slice(0,5);
+    argsText=entries.map(([k,v])=>{
+      const vs=typeof v==='string'?v:JSON.stringify(v);
+      return k+': '+(vs.length>120?vs.slice(0,120)+'…':vs);
+    }).join('\n');
+  }catch{}
+  const block=document.createElement('div');
+  block.className='tool-block';
+  block.id='tool-blk-'+esc(msg.id);
+  block.innerHTML=
+    '<div class="tool-block-hdr" onclick="toggleToolBlock(this)">'+
+      '<span class="tool-icon running">'+SVG_SPIN+'</span>'+
+      '<span class="tool-name-lbl">'+esc(msg.name)+'</span>'+
+      '<span class="tool-toggle-arrow">▼</span>'+
+    '</div>'+
+    '<div class="tool-block-body">'+
+      '<div class="tool-args-pre">'+esc(argsText||'(no args)')+'</div>'+
+    '</div>';
+  stream.appendChild(block);
+  $msgs.scrollTo({top:$msgs.scrollHeight,behavior:'smooth'});
+}
+
+function onToolDone(msg){
+  const block=document.getElementById('tool-blk-'+msg.id);
+  if(!block)return;
+  const icon=block.querySelector('.tool-icon');
+  if(msg.ok){icon.className='tool-icon ok';icon.innerHTML=SVG_CHECK;}
+  else{icon.className='tool-icon err';icon.innerHTML=SVG_CROSS;}
+}
+
+function toggleToolBlock(hdr){
+  const body=hdr.nextElementSibling;
+  const arrow=hdr.querySelector('.tool-toggle-arrow');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+
+// ── Tasks panel ────────────────────────────────────────────────────────────
+let currentTodos=[];
+
+const SVG_CIRCLE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>';
+const SVG_TICK='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="9 12 11 14 15 10"/></svg>';
+const SVG_SPIN_SM='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
+
+function onTodoUpdate(todos){
+  currentTodos=todos;
+  renderTodos(todos);
+  updateTasksBadge(todos);
+}
+
+function renderTodos(todos){
+  const list=document.getElementById('todo-list');
+  const empty=document.getElementById('tasks-empty');
+  if(!list)return;
+  if(!todos||!todos.length){
+    empty.style.display='';list.innerHTML='';return;
+  }
+  empty.style.display='none';
+  list.innerHTML=todos.map((t,i)=>{
+    const ip=t.status==='in_progress';
+    const done=t.status==='completed';
+    const iconClass='todo-icon'+(ip?' running':done?' done':'');
+    const icon=done?SVG_TICK:ip?SVG_SPIN_SM:SVG_CIRCLE;
+    const pri=t.priority==='high'?'<span class="todo-priority high">high</span>':
+               t.priority==='low'?'<span class="todo-priority low">low</span>':'';
+    return'<div class="todo-item s-'+esc(t.status)+'">'+
+      '<span class="'+iconClass+'">'+icon+'</span>'+
+      '<span class="todo-content">'+(i+1)+'. '+esc(t.content)+'</span>'+
+      pri+
+    '</div>';
+  }).join('');
+}
+
+function updateTasksBadge(todos){
+  const active=(todos||[]).filter(t=>t.status!=='completed').length;
+  const navItem=document.querySelector('[data-panel="tasks"]');
+  if(!navItem)return;
+  let badge=navItem.querySelector('.nav-badge');
+  if(active>0){
+    if(!badge){badge=document.createElement('span');badge.className='nav-badge';navItem.appendChild(badge);}
+    badge.textContent=active;
+  }else{
+    badge?.remove();
   }
 }
 

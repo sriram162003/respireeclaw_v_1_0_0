@@ -143,6 +143,24 @@ if [ -d "$DEFAULT_SKILLS_DIR" ]; then
     done
     [ "$copied" -gt 0 ] && echo "Synced $copied new skill file(s) to $SKILLS_DIR"
     [ "$updated" -gt 0 ] && echo "Updated $updated changed skill file(s) in $SKILLS_DIR"
+    # Remove skills from the volume that no longer exist in default-skills/
+    removed=0
+    for dest in "$SKILLS_DIR"/*; do
+        fname=$(basename "$dest")
+        if [ ! -f "$DEFAULT_SKILLS_DIR/$fname" ]; then
+            rm -f "$dest"
+            removed=$((removed + 1))
+        fi
+    done
+    [ "$removed" -gt 0 ] && echo "Removed $removed obsolete skill file(s) from $SKILLS_DIR"
+fi
+
+# Load API keys from persistent volume (dashboard saves keys here, survives rebuilds)
+if [ -f "/root/.aura/.env" ]; then
+    set -o allexport
+    # shellcheck disable=SC1091
+    source /root/.aura/.env
+    set +o allexport
 fi
 
 # Start the server

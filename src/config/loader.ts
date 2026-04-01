@@ -28,6 +28,12 @@ export interface GatewayConfig {
   canvas:    { enabled: boolean; port: number };
   scheduler: { heartbeat_interval_min: number; reminder_check_sec: number; nightly_summary_time: string };
   security:  { bind_address: string; rest_port: number };
+  memory?: {
+    max_turns?:                number;  // default 30
+    session_ttl_hours?:        number;  // default 2
+    session_token_soft_limit?: number;  // default 50000 — prepend "be concise" nudge
+    session_token_hard_limit?: number;  // default 100000 — refuse and ask to start new session
+  };
 }
 
 function interpolateEnv(obj: unknown): unknown {
@@ -68,7 +74,7 @@ export function loadConfig(): GatewayConfig {
         claude:      { api_key: process.env.ANTHROPIC_API_KEY,  models: ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4'] },
         openai:      { api_key: process.env.OPENAI_API_KEY,    models: ['gpt-4o', 'gpt-4o-mini'] },
         ollama:      { base_url: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434', models: ['llama3.2:3b'] },
-        gemini:      { api_key: process.env.GOOGLE_API_KEY,    models: ['gemini-1.5-pro', 'gemini-1.5-flash'] },
+        gemini:      { api_key: process.env.GOOGLE_API_KEY,    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-lite'] },
         mistral:     { api_key: process.env.MISTRAL_API_KEY,   models: ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b'] },
         openrouter:  { api_key: process.env.OPENROUTER_API_KEY, models: ['anthropic/claude-3.5-sonnet', 'openai/gpt-4o', 'google/gemini-pro-1.5'] },
         nvidia:      { api_key: process.env.NVIDIA_API_KEY,      base_url: 'https://integrate.api.nvidia.com/v1',  models: ['nvidia/nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/nvidia/llama-3.1-nemotron-nano-8b-v1', 'nvidia/moonshotai/kimi-k2.5', 'nvidia/mistralai/mistral-nemo-12b-instruct'] },

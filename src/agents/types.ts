@@ -1,13 +1,15 @@
 export interface AgentConfig {
-  id:          string;
-  name:        string;
-  description: string;
-  persona:     string;
-  channels:    string[];
-  skills:      string[];
-  llm_tier:    'simple' | 'complex' | 'vision' | 'creative' | 'offline';
-  voice_id:    string | null;
-  memory_ns:   string;
+  id:             string;
+  name:           string;
+  description:    string;
+  persona:        string;
+  channels:       string[];
+  skills:         string[];
+  /** When set, only tools from these skill names are included in LLM calls. */
+  allowed_skills?: string[];
+  llm_tier:       'simple' | 'complex' | 'vision' | 'creative' | 'offline';
+  voice_id:       string | null;
+  memory_ns:      string;
 }
 
 export interface AgentProfile extends AgentConfig {

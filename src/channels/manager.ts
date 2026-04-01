@@ -39,6 +39,16 @@ export class ChannelManager {
     console.warn(`[Channels] No adapter found for node_id: ${node_id}`);
   }
 
+  /** Push a raw event payload to a browser session if the adapter supports it. */
+  pushEvent(node_id: string, payload: Record<string, unknown>): void {
+    for (const adapter of this.adapters.values()) {
+      if (node_id.startsWith(adapter.channel_id + '_') || node_id === adapter.channel_id) {
+        adapter.pushEvent?.(node_id, payload);
+        return;
+      }
+    }
+  }
+
   /** Send a typing/composing indicator if the adapter supports it. */
   async sendTyping(node_id: string): Promise<void> {
     for (const adapter of this.adapters.values()) {
